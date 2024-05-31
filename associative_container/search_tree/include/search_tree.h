@@ -160,11 +160,7 @@ protected:
     explicit search_tree(
         std::function<int(tkey const &, tkey const &)> keys_comparer = typename associative_container<tkey, tvalue>::default_key_comparer(),
         allocator *allocator = nullptr,
-        logger *logger = nullptr,
-        typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy insertion_strategy =
-                search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy::throw_an_exception,
-        typename search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy disposal_strategy =
-                search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy::throw_an_exception);
+        logger *logger = nullptr);
     
 public:
     
@@ -173,14 +169,7 @@ public:
         tkey const &upper_bound,
         bool lower_bound_inclusive,
         bool upper_bound_inclusive) = 0;
-public:
-    
-    void set_insertion_strategy(
-        typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy insertion_strategy) noexcept;
-    
-    void set_disposal_strategy(
-        typename search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy disposal_strategy) noexcept;
-    
+
 protected:
     
     [[nodiscard]] inline allocator *get_allocator() const final;
@@ -520,40 +509,12 @@ template<
 search_tree<tkey, tvalue>::search_tree(
     std::function<int(tkey const &, tkey const &)> keys_comparer,
     allocator *allocator,
-    logger *logger,
-    typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy insertion_strategy,
-    typename search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy disposal_strategy):
+    logger *logger):
         _keys_comparer(keys_comparer),
         _allocator(allocator),
         _logger(logger),
-        _root(nullptr),
-        _insertion_strategy(insertion_strategy),
-        _disposal_strategy(disposal_strategy)
+        _root(nullptr)
 { }
-
-template<
-    typename tkey,
-    typename tvalue>
-void search_tree<tkey, tvalue>::set_insertion_strategy(
-    typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy insertion_strategy) noexcept
-{
-    _insertion_strategy = insertion_strategy;
-    
-    this->debug_with_guard(get_typename() + "::set_insertion_strategy(insertion_of_existent_key_attempt_strategy) : insertion strategy set to "
-            + (insertion_strategy == insertion_of_existent_key_attempt_strategy::update_value ? "update_value" : "throw_an_exception"));
-}
-
-template<
-    typename tkey,
-    typename tvalue>
-void search_tree<tkey, tvalue>::set_disposal_strategy(
-    typename search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy disposal_strategy) noexcept
-{
-    _disposal_strategy = disposal_strategy;
-    
-    this->debug_with_guard(get_typename() + "::set_disposal_strategy(disposal_of_nonexistent_key_attempt_strategy) : disposal strategy set to "
-            + (disposal_strategy == disposal_of_nonexistent_key_attempt_strategy::update_value ? "update_value" : "throw_an_exception"));
-}
 
 template<
     typename tkey,

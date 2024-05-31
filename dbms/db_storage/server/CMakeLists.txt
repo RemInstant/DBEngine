@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 project(os_cw_dbms_db_strg_srvr)
 
-add_library(
+add_executable(
         os_cw_dbms_db_strg_srvr
         src/db_storage_server.cpp)
 target_include_directories(
@@ -11,23 +11,7 @@ target_include_directories(
 target_link_libraries(
         os_cw_dbms_db_strg_srvr
         PUBLIC
-        os_cw_cmmn)
-target_link_libraries(
-        os_cw_dbms_db_strg_srvr
-        PUBLIC
-        os_cw_lggr_srvr_lggr)
-target_link_libraries(
-        os_cw_dbms_db_strg_srvr
-        PUBLIC
-        os_cw_assctv_cntnr)
-target_link_libraries(
-        os_cw_dbms_db_strg_srvr
-        PUBLIC
-        os_cw_assctv_cntnr_srch_tr)
-target_link_libraries(
-        os_cw_dbms_db_strg_srvr
-        PUBLIC
-        os_cw_assctv_cntnr_srch_tr_indxng_tr_b_tr)
+        os_cw_dbms_db_strg)
 set_target_properties(
         os_cw_dbms_db_strg_srvr PROPERTIES
         LANGUAGES CXX

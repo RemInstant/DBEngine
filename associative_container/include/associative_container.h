@@ -62,16 +62,6 @@ public:
 
 public:
     
-    // TODO
-    struct associative_container_iterator
-    {
-    
-    public:
-    
-    };
-
-public:
-    
     virtual ~associative_container() noexcept = default;
 
 public:
@@ -92,7 +82,7 @@ public:
         tkey const &key,
         tvalue &&value) = 0;
     
-    virtual tvalue const &obtain(
+    virtual tvalue &obtain(
         tkey const &key) = 0;
     
     virtual void dispose(

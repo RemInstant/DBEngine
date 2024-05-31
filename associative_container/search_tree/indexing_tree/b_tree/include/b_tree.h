@@ -4,6 +4,7 @@
 #include <search_tree.h>
 
 #include <extra_utility.h>
+#include <mutex>
 
 template<
     typename tkey,
@@ -103,7 +104,7 @@ public:
         tkey const &key,
         tvalue &&value) override;
     
-    tvalue const &obtain(
+    tvalue &obtain(
         tkey const &key) override;
 
     void dispose(
@@ -125,11 +126,7 @@ public:
         size_t t,
         std::function<int(tkey const &, tkey const &)> keys_comparer = typename associative_container<tkey, tvalue>::default_key_comparer(),
         allocator *allocator = nullptr,
-        logger *logger = nullptr,
-        typename b_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy insertion_strategy =
-                b_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy::throw_an_exception,
-        typename b_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy disposal_strategy =
-                b_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy::throw_an_exception);
+        logger *logger = nullptr);
 
     b_tree(
         b_tree<tkey, tvalue> const &other);
@@ -512,7 +509,10 @@ void b_tree<tkey, tvalue>::insert_inner(
             return;
         }
         
-        auto [right_subtree, kvp] = this->node_split(node, std::move(kvp), subtree_index, right_subtree);
+        auto pair = this->node_split(node, std::move(kvp), subtree_index, right_subtree);
+        right_subtree = pair.first;
+        kvp = std::move(pair.second);
+        
         
         if (path.size() == 1)
         {
@@ -582,6 +582,7 @@ void b_tree<tkey, tvalue>::insert(
         this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : attempt to insert key duplicate.");
         throw;
     }
+    // TODO CATCH BAD ALLOC?
     
     this->trace_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.")
         ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.");
@@ -590,7 +591,7 @@ void b_tree<tkey, tvalue>::insert(
 template<
     typename tkey,
     typename tvalue>
-void b_tree<tkey, tvalue>::insert(
+void b_tree<tkey, tvalue>::update(
     tkey const &key,
     tvalue const &value)
 {
@@ -630,27 +631,7 @@ void b_tree<tkey, tvalue>::update(
 template<
     typename tkey,
     typename tvalue>
-void b_tree<tkey, tvalue>::update(
-    tkey const &key,
-    tvalue const &value)
-{
-    std::lock_guard<std::mutex> lock(_mutex);
-    
-    this->trace_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : called.")
-        ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : called.")
-        ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : inserting node with key \"" + 
-            extra_utility::make_string(key) + "\"");
-    
-    insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, value)), true);
-    
-    this->trace_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.")
-        ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.");
-}
-
-template<
-    typename tkey,
-    typename tvalue>
-tvalue const &b_tree<tkey, tvalue>::update(
+tvalue &b_tree<tkey, tvalue>::obtain(
     tkey const &key)
 {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -675,7 +656,7 @@ tvalue const &b_tree<tkey, tvalue>::update(
 template<
     typename tkey,
     typename tvalue>
-tvalue b_tree<tkey, tvalue>::dispose(
+void b_tree<tkey, tvalue>::dispose(
     tkey const &key)
 {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -688,17 +669,9 @@ tvalue b_tree<tkey, tvalue>::dispose(
     auto path = this->find_path(key);
     if (path.top().second < 0)
     {
-        switch (this->_disposal_strategy)
-        {
-            case search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy::throw_an_exception:
-                this->error_with_guard(get_typename() + "::dispose(tkey const &) : key \"" +
-                        extra_utility::make_string(key) + "\" is not present in container.");
-                throw typename search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_exception(key);
-            case search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy::do_nothing:
-                this->warning_with_guard(get_typename() + "::dispose(tkey const &) : key \"" +
-                        extra_utility::make_string(key) + "\" is not present in container.");
-                return tvalue();
-        }
+        this->error_with_guard(get_typename() + "::dispose(tkey const &) : key \"" +
+                extra_utility::make_string(key) + "\" is not present in container.");
+        throw typename search_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_exception(key);
     }
     
     // Reducing non-leaf disposal to leaf disposal
@@ -728,8 +701,6 @@ tvalue b_tree<tkey, tvalue>::dispose(
     auto kvp_to_dispose_index = path.top().second;
     path.pop();
     
-    tvalue value = std::move(target_node->keys_and_values[kvp_to_dispose_index].value);
-    
     for (size_t i = kvp_to_dispose_index + 1; i < target_node->virtual_size; ++i)
     {
         std::swap(target_node->keys_and_values[i - 1], target_node->keys_and_values[i]);
@@ -744,7 +715,7 @@ tvalue b_tree<tkey, tvalue>::dispose(
         {
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return value;
+            return;
         }
         
         if (path.size() == 0)
@@ -758,7 +729,7 @@ tvalue b_tree<tkey, tvalue>::dispose(
             
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return value;
+            return;
         }
         
         // right parent
@@ -796,7 +767,7 @@ tvalue b_tree<tkey, tvalue>::dispose(
             
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return value;
+            return;
         }
         
         if (can_take_from_right)
@@ -822,7 +793,7 @@ tvalue b_tree<tkey, tvalue>::dispose(
             
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return value;
+            return;
         }
         
         this->node_merge(parent, parent_index - (left_brother_exists ? 1 : 0));
@@ -909,10 +880,8 @@ b_tree<tkey, tvalue>::b_tree(
     size_t t,
     std::function<int(tkey const &, tkey const &)> keys_comparer,
     allocator *allocator,
-    logger *logger,
-    typename b_tree<tkey, tvalue>::insertion_of_existent_key_attempt_strategy insertion_strategy,
-    typename b_tree<tkey, tvalue>::disposal_of_nonexistent_key_attempt_strategy disposal_strategy):
-        search_tree<tkey, tvalue>(keys_comparer, allocator, logger, insertion_strategy, disposal_strategy),
+    logger *logger):
+        search_tree<tkey, tvalue>(keys_comparer, allocator, logger),
         _t(t)
 { }
 
@@ -921,8 +890,7 @@ template<
     typename tvalue>
 b_tree<tkey, tvalue>::b_tree(
     b_tree<tkey, tvalue> const &other):
-        search_tree<tkey, tvalue>(other._keys_comparer, other._allocator, other._logger,
-                other._insertion_strategy, other._disposal_strategy),
+        search_tree<tkey, tvalue>(other._keys_comparer, other._allocator, other._logger),
         _t(other._t)
 {
     std::lock(_mutex, other._mutex);
@@ -944,8 +912,7 @@ template<
     typename tvalue>
 b_tree<tkey, tvalue>::b_tree(
     b_tree<tkey, tvalue> &&other) noexcept:
-        search_tree<tkey, tvalue>(other._keys_comparer, other._allocator, other._logger,
-                other._insertion_strategy, other._disposal_strategy),
+        search_tree<tkey, tvalue>(other._keys_comparer, other._allocator, other._logger),
         _t(other._t)
 {
     std::lock(_mutex, other._mutex);
@@ -953,9 +920,6 @@ b_tree<tkey, tvalue>::b_tree(
     std::lock_guard<std::mutex> lock_2(other._mutex, std::adopt_lock);
     
     this->_root = other._root;
-    
-    this->_insertion_strategy = other._insertion_strategy;
-    this->_disposal_strategy = other._disposal_strategy;
     
     other._logger = nullptr;
     other._allocator = nullptr;
@@ -981,9 +945,6 @@ b_tree<tkey, tvalue> &b_tree<tkey, tvalue>::operator=(
         this->_allocator = other._allocator;
         this->_logger = other._logger;
         
-        this->_insertion_strategy = other._insertion_strategy;
-        this->_disposal_strategy = other._disposal_strategy;
-        
         _t = other._t;
     }
     
@@ -1008,9 +969,6 @@ b_tree<tkey, tvalue> &b_tree<tkey, tvalue>::operator=(
         this->_allocator = other._allocator;
         this->_logger = other._logger;
         this->_root = other._root;
-        
-        this->_insertion_strategy = other._insertion_strategy;
-        this->_disposal_strategy = other._disposal_strategy;
         
         _t = other._t;
         

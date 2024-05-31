@@ -14,7 +14,22 @@ using tvalue = int;
 
 // };
 
-class db_storage_server final
+class tkey_comparer final
+{
+
+public:
+
+    int operator()(
+        tkey const &key1,
+        tkey const &key2) const
+    {
+        return rand() % 3 - 1;
+    }
+
+};
+
+
+class db_storage final
 {
 
 public:
@@ -70,11 +85,19 @@ private:
 	
 		void insert(
 			tkey const &key,
-			tvalue &&data);
+			tvalue const &value);
+		
+		void insert(
+			tkey const &key,
+			tvalue &&value);
 		
 		void update(
 			tkey const &key,
-			tvalue &&data);
+			tvalue const &value);
+		
+		void update(
+			tkey const &key,
+			tvalue &&value);
 		
 		void dispose(
 			tkey const &key);
@@ -105,7 +128,7 @@ private:
 	
 	private:
 	
-		search_tree<std::string, collection> *_collection;
+		search_tree<std::string, collection> *_collections;
 		search_tree_variant _variant;
 	
 	public:
@@ -160,7 +183,7 @@ private:
 	
 	private:
 	
-		search_tree<std::string, schema> *_schema;
+		search_tree<std::string, schema> *_schemas;
 		search_tree_variant _variant;
 	
 	public:
@@ -195,7 +218,7 @@ private:
 		void dispose(
 			std::string const &schema_name);
 		
-		collection &obtain(
+		schema &obtain(
 			std::string const &schema_name);
 	
 	private:
@@ -217,82 +240,92 @@ private:
 
 public:
 
-	static db_storage_server *get_instance()
-	{
-		static auto *instance = new db_storage_server();
-		return instance;
-	}
+	static db_storage *get_instance();
 
 public:
 
-	db_storage_server(
-		db_storage_server const &) = delete;
+	db_storage(
+		db_storage const &) = delete;
 	
-	db_storage_server(
-		db_storage_server &&) = delete;
+	db_storage(
+		db_storage &&) = delete;
 
 public:
 
-	db_storage_server *set_mode(
-		mode _mode);
+	db_storage *set_mode(
+		mode mode);
 
-	db_storage_server *add_pool(
+	db_storage *add_pool(
 		std::string const &pool_name,
 		search_tree_variant variant,
 		size_t t_for_b_trees = 8);
 	
-	db_storage_server *dispose_pool(
+	db_storage *dispose_pool(
 		std::string const &pool_name);
 	
-	db_storage_server *add_schema(
+	db_storage *add_schema(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		search_tree_variant variant,
 		size_t t_for_b_trees = 8);
 	
-	db_storage_server *dispose_schema(
+	db_storage *dispose_schema(
 		std::string const &pool_name,
 		std::string const &schema_name);
 	
-	db_storage_server *add_collection(
+	db_storage *add_collection(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
 		search_tree_variant variant,
 		size_t t_for_b_trees = 8);
 	
-	db_storage_server *dispose_collection(
+	db_storage *dispose_collection(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name);
 	
-	db_storage_server *add(
+	db_storage *add(
+		std::string const &pool_name,
+		std::string const &schema_name,
+		std::string const &collection_name,
+		tkey const &key,
+		tvalue const &value);
+	
+	db_storage *add(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
 		tkey const &key,
 		tvalue &&value);
 	
-	db_storage_server *update(
+	db_storage *update(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
 		tkey const &key,
 		tvalue &&value);
 	
-	db_storage_server *dispose(
+	db_storage *update(
+		std::string const &pool_name,
+		std::string const &schema_name,
+		std::string const &collection_name,
+		tkey const &key,
+		tvalue const &value);
+	
+	db_storage *dispose(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
 		tkey const &key);
 	
-	tvalue *obtain(
+	tvalue obtain(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
 		tkey const &key);
 	
-	std::vector<typename associative_container<tkey, tvalue>::key_value_pair> *obtain_between(
+	std::vector<typename associative_container<tkey, tvalue>::key_value_pair> obtain_between(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
@@ -303,7 +336,7 @@ public:
 
 private:
 
-	db_storage_server();
+	db_storage();
 
 private:
 
@@ -320,25 +353,28 @@ private:
 
 private:
 
-	db_storage_server &throw_if_uninutialized(
+	db_storage &throw_if_uninitialized(
 		mode mode,
 		std::string const &exception_message);
 	
-	db_storage_server &throw_if_uninutialized_at_setup(
+	db_storage &throw_if_initialized_at_setup();
+	
+	db_storage &throw_if_uninitialized_at_setup(
 		mode mode);
 	
-	db_storage_server &throw_if_uninutialized();
+	db_storage &throw_if_uninutialized_at_perform();
 	
-	db_storage_server &throw_if_uninutialized_at_perform(
-		mode mode);
+	db_storage &throw_if_invalid_path(
+		std::string const &pool_name,
+		std::string const &schema_name = "",
+		std::string const &collection_name = "");
 	
-	db_storage_server &throw_if_invalid_path(
-		std::string const &subpath);
+	db_storage &throw_if_invalid_file_name(
+		std::string const &file_name);
 	
-	db_storage_server &throw_if_invalid_file_name(
-		std::string const &subpath);
-	
-	db_storage_server &throw_if_path_is_too_long(
-		std::string const &subpath);
+	db_storage &throw_if_path_is_too_long(
+		std::string const &pool_name,
+		std::string const &schema_name = "",
+		std::string const &collection_name = "");
 
 };
