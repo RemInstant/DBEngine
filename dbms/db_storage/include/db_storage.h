@@ -1,33 +1,7 @@
 #include <search_tree.h>
 #include <b_tree.h>
-
-using tkey = int;
-using tvalue = int;
-
-// class tdata final
-// {
-
-// public:
-
-// 	tkey key;
-// 	tvalue value;
-
-// };
-
-class tkey_comparer final
-{
-
-public:
-
-    int operator()(
-        tkey const &key1,
-        tkey const &key2) const
-    {
-        return rand() % 3 - 1;
-    }
-
-};
-
+#include <allocator.h>
+#include <tdata.h>
 
 class db_storage final
 {
@@ -48,21 +22,35 @@ public:
 		b_star,
 		b_star_plus
 	};
+	
+	enum class allocator_variant
+	{
+		global_heap,
+		sorted_list,
+		buddy_system,
+		boundary_tags,
+		red_black_tree
+	};
 
 private:
 
-	class collection final
+	class collection final:
+		protected allocator_guardant
 	{
 	
 	private:
 	
-		search_tree<tkey, tvalue> *_data;
-		search_tree_variant _variant;
+		search_tree<tkey, tdata *> *_data;
+		search_tree_variant _tree_variant;
+		
+		allocator *_allocator;
+		allocator_variant _allocator_variant;
 	
 	public:
 	
 		explicit collection(
-			search_tree_variant variant,
+			search_tree_variant tree_variant,
+			allocator_variant allocator_variant,
 			size_t t_for_b_trees = 8);
 		
 	public:
@@ -85,31 +73,38 @@ private:
 	
 		void insert(
 			tkey const &key,
-			tvalue const &value);
+			tvalue const &value,
+			std::string const &path);
 		
 		void insert(
 			tkey const &key,
-			tvalue &&value);
+			tvalue &&value,
+			std::string const &path);
 		
 		void update(
 			tkey const &key,
-			tvalue const &value);
+			tvalue const &value,
+			std::string const &path);
 		
 		void update(
 			tkey const &key,
-			tvalue &&value);
+			tvalue &&value,
+			std::string const &path);
 		
 		void dispose(
-			tkey const &key);
+			tkey const &key,
+			std::string const &path);
 		
-		tvalue &obtain(
-			tkey const &key);
+		tvalue obtain(
+			tkey const &key,
+			std::string const &path);
 		
 		std::vector<typename associative_container<tkey, tvalue>::key_value_pair> obtain_between(
 			tkey const &lower_bound,
 			tkey const &upper_bound,
 			bool lower_bound_inclusive,
-			bool upper_bound_inclusive);
+			bool upper_bound_inclusive,
+			std::string const &path);
 	
 	private:
 	
@@ -121,6 +116,10 @@ private:
 		void move_from(
 			collection &&other);
 	
+	private:
+	
+		[[nodiscard]] inline allocator *get_allocator() const final;
+	
 	};
 
 	class schema final
@@ -129,12 +128,12 @@ private:
 	private:
 	
 		search_tree<std::string, collection> *_collections;
-		search_tree_variant _variant;
+		search_tree_variant _tree_variant;
 	
 	public:
 	
 		explicit schema(
-			search_tree_variant variant,
+			search_tree_variant tree_variant,
 			size_t t_for_b_trees = 8);
 		
 	public:
@@ -157,7 +156,8 @@ private:
 	
 		void add(
 			std::string const &collection_name,
-			search_tree_variant variant,
+			search_tree_variant tree_variant,
+			allocator_variant allocator_variant,
 			size_t t_for_b_trees = 8);
 		
 		void dispose(
@@ -184,12 +184,12 @@ private:
 	private:
 	
 		search_tree<std::string, schema> *_schemas;
-		search_tree_variant _variant;
+		search_tree_variant _tree_variant;
 	
 	public:
 	
 		explicit pool(
-			search_tree_variant variant,
+			search_tree_variant tree_variant,
 			size_t t_for_b_trees = 8);
 		
 	public:
@@ -212,7 +212,7 @@ private:
 	
 		void add(
 			std::string const &schema_name,
-			search_tree_variant variant,
+			search_tree_variant tree_variant,
 			size_t t_for_b_trees = 8);
 		
 		void dispose(
@@ -257,7 +257,7 @@ public:
 
 	db_storage *add_pool(
 		std::string const &pool_name,
-		search_tree_variant variant,
+		search_tree_variant tree_variant,
 		size_t t_for_b_trees = 8);
 	
 	db_storage *dispose_pool(
@@ -266,7 +266,7 @@ public:
 	db_storage *add_schema(
 		std::string const &pool_name,
 		std::string const &schema_name,
-		search_tree_variant variant,
+		search_tree_variant tree_variant,
 		size_t t_for_b_trees = 8);
 	
 	db_storage *dispose_schema(
@@ -277,7 +277,8 @@ public:
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
-		search_tree_variant variant,
+		search_tree_variant tree_variant,
+		allocator_variant allocator_variant,
 		size_t t_for_b_trees = 8);
 	
 	db_storage *dispose_collection(
@@ -342,7 +343,7 @@ private:
 
 	void add(
 		std::string const &pool_name,
-		search_tree_variant variant,
+		search_tree_variant tree_variant,
 		size_t t_for_b_trees = 8);
 	
 	void dispose(
@@ -350,6 +351,13 @@ private:
 	
 	pool &obtain(
 		std::string const &pool_name);
+
+private:
+
+	static std::string make_path(
+		std::string const &pool_name,
+		std::string const &schema_name = "",
+		std::string const &collection_name = "");
 
 private:
 

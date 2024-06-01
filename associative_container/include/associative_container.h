@@ -85,7 +85,7 @@ public:
     virtual tvalue &obtain(
         tkey const &key) = 0;
     
-    virtual void dispose(
+    virtual tvalue dispose(
         tkey const &key) = 0;
   
 };

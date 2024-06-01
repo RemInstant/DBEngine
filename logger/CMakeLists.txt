@@ -7,6 +7,6 @@ project(os_cw_lggr
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(logger)
-#add_subdirectory(client_logger)
+add_subdirectory(client_logger)
 add_subdirectory(server_logger)
 add_subdirectory(linux_logging_server)

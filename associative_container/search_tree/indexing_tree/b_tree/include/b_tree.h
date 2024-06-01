@@ -107,7 +107,7 @@ public:
     tvalue &obtain(
         tkey const &key) override;
 
-    void dispose(
+    tvalue dispose(
         tkey const &key) override;
 
     std::vector<typename associative_container<tkey, tvalue>::key_value_pair> obtain_between(
@@ -656,7 +656,7 @@ tvalue &b_tree<tkey, tvalue>::obtain(
 template<
     typename tkey,
     typename tvalue>
-void b_tree<tkey, tvalue>::dispose(
+tvalue b_tree<tkey, tvalue>::dispose(
     tkey const &key)
 {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -701,6 +701,8 @@ void b_tree<tkey, tvalue>::dispose(
     auto kvp_to_dispose_index = path.top().second;
     path.pop();
     
+    tvalue value = std::move(target_node->keys_and_values[kvp_to_dispose_index].value);
+    
     for (size_t i = kvp_to_dispose_index + 1; i < target_node->virtual_size; ++i)
     {
         std::swap(target_node->keys_and_values[i - 1], target_node->keys_and_values[i]);
@@ -715,7 +717,7 @@ void b_tree<tkey, tvalue>::dispose(
         {
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return;
+            return value;
         }
         
         if (path.size() == 0)
@@ -729,7 +731,7 @@ void b_tree<tkey, tvalue>::dispose(
             
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return;
+            return value;
         }
         
         // right parent
@@ -767,7 +769,7 @@ void b_tree<tkey, tvalue>::dispose(
             
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return;
+            return value;
         }
         
         if (can_take_from_right)
@@ -793,7 +795,7 @@ void b_tree<tkey, tvalue>::dispose(
             
             this->trace_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.")
                 ->debug_with_guard(get_typename() + "::dispose(tkey const &) : successfuly finished.");
-            return;
+            return value;
         }
         
         this->node_merge(parent, parent_index - (left_brother_exists ? 1 : 0));

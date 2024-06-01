@@ -1,4 +1,4 @@
-
+#include <cstring>
 
 #include "../include/db_storage.h"
 
@@ -6,11 +6,13 @@
 #pragma region collection implementation
 
 db_storage::collection::collection(
-	search_tree_variant variant,
+	search_tree_variant tree_variant,
+	db_storage::allocator_variant allocator_variant,
 	size_t t_for_b_trees):
-		_variant(variant)
+		_tree_variant(tree_variant),
+		_allocator_variant(allocator_variant)
 {
-	switch (variant)
+	switch (tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -23,7 +25,7 @@ db_storage::collection::collection(
 	default:
 		try
 		{
-			_data = new b_tree<tkey, tvalue>(t_for_b_trees, tkey_comparer());
+			_data = new b_tree<tkey, tdata *>(t_for_b_trees, tkey_comparer());
 		}
 		catch (std::bad_alloc const &)
 		{
@@ -32,6 +34,8 @@ db_storage::collection::collection(
 		}
 		break;
 	}
+	
+	// TODO ALLOCATORS IMPORTANT
 }
 
 db_storage::collection::~collection()
@@ -77,42 +81,206 @@ db_storage::collection &db_storage::collection::operator=(
 
 void db_storage::collection::insert(
 	tkey const &key,
-	tvalue const &value)
+	tvalue const &value,
+	std::string const &path)
 {
-	_data->insert(key, value);
+	tdata *data = nullptr;
+	
+	try
+	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			data = reinterpret_cast<file_tdata *>(allocate_with_guard(sizeof(file_tdata), 1));
+			allocator::construct(reinterpret_cast<file_tdata *>(data));
+		}
+		else
+		{
+			data = reinterpret_cast<ram_tdata *>(allocate_with_guard(sizeof(ram_tdata), 1));
+			allocator::construct(reinterpret_cast<ram_tdata *>(data), value);
+		}
+	}
+	catch (std::bad_alloc const &)
+	{
+		deallocate_with_guard(data);
+		throw;
+		// TODO
+	}
+	
+	try
+	{
+		_data->insert(key, data);
+	}
+	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception const &)
+	{
+		deallocate_with_guard(data);
+		throw;
+		// TODO
+	}
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+	}
 }
 
 void db_storage::collection::insert(
 	tkey const &key,
-	tvalue &&value)
+	tvalue &&value,
+	std::string const &path)
 {
-	_data->insert(key, std::move(value));
+	tdata *data = nullptr;
+	
+	try
+	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			data = reinterpret_cast<file_tdata *>(allocate_with_guard(sizeof(file_tdata), 1));
+			allocator::construct(reinterpret_cast<file_tdata *>(data));
+		}
+		else
+		{
+			data = reinterpret_cast<ram_tdata *>(allocate_with_guard(sizeof(ram_tdata), 1));
+			allocator::construct(reinterpret_cast<ram_tdata *>(data), std::move(value));
+		}
+	}
+	catch (std::bad_alloc const &)
+	{
+		deallocate_with_guard(data);
+		throw;
+		// TODO
+	}
+	
+	try
+	{
+		_data->insert(key, data);
+	}
+	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception const &)
+	{
+		deallocate_with_guard(data);
+		throw;
+		// TODO
+	}
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+	}
 }
 
 void db_storage::collection::update(
 	tkey const &key,
-	tvalue const &value)
+	tvalue const &value,
+	std::string const &path)
 {
-	_data->update(key, value);
+	tdata *data = nullptr;
+	
+	try
+	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			data = reinterpret_cast<file_tdata *>(allocate_with_guard(sizeof(file_tdata), 1));
+			allocator::construct(reinterpret_cast<file_tdata *>(data));
+		}
+		else
+		{
+			data = reinterpret_cast<ram_tdata *>(allocate_with_guard(sizeof(ram_tdata), 1));
+			allocator::construct(reinterpret_cast<ram_tdata *>(data), value);
+		}
+	}
+	catch (std::bad_alloc const &)
+	{
+		deallocate_with_guard(data);
+		throw;
+		// TODO
+	}
+	
+	_data->update(key, data);
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+	}
 }
 
 void db_storage::collection::update(
 	tkey const &key,
-	tvalue &&value)
+	tvalue &&value,
+	std::string const &path)
 {
-	_data->update(key, std::move(value));
+	tdata *data = nullptr;
+	
+	try
+	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			data = reinterpret_cast<file_tdata *>(allocate_with_guard(sizeof(file_tdata), 1));
+			allocator::construct(reinterpret_cast<file_tdata *>(data));
+		}
+		else
+		{
+			data = reinterpret_cast<ram_tdata *>(allocate_with_guard(sizeof(ram_tdata), 1));
+			allocator::construct(reinterpret_cast<ram_tdata *>(data), std::move(value));
+		}
+	}
+	catch (std::bad_alloc const &)
+	{
+		deallocate_with_guard(data);
+		throw;
+		// TODO
+	}
+	
+	_data->update(key, data);
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+	}
 }
 
 void db_storage::collection::dispose(
-	tkey const &key)
+	tkey const &key,
+	std::string const &path)
 {
-	_data->dispose(key);
+	tdata *data = nullptr;
+	
+	try
+	{
+		data = _data->dispose(key);
+	}
+	catch (search_tree<tkey, tdata *>::disposal_of_nonexistent_key_attempt_exception)
+	{
+		throw;
+		// TODO
+	}
+	
+	allocator::destruct(data);
+	deallocate_with_guard(data);
 };
 
-tvalue &db_storage::collection::obtain(
-	tkey const &key)
+tvalue db_storage::collection::obtain(
+	tkey const &key,
+	std::string const &path)
 {
-	return _data->obtain(key);
+	tdata *data = nullptr;
+	
+	try
+	{
+		data = _data->obtain(key);
+	}
+	catch (search_tree<tkey, tdata *>::obtaining_of_nonexistent_key_attempt_exception)
+	{
+		throw;
+		// TODO
+	}
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		return dynamic_cast<file_tdata *>(data)->deserialize(path);
+	}
+	else
+	{
+		return dynamic_cast<ram_tdata *>(data)->value;
+	}
 };
 
 std::vector<typename associative_container<tkey, tvalue>::key_value_pair>
@@ -120,10 +288,38 @@ db_storage::collection::obtain_between(
 	tkey const &lower_bound,
 	tkey const &upper_bound,
 	bool lower_bound_inclusive,
-	bool upper_bound_inclusive)
+	bool upper_bound_inclusive,
+	std::string const &path)
 {
-	return _data->obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive);
-};
+	std::vector<typename associative_container<tkey, tdata *>::key_value_pair> data_vec;
+	
+	try
+	{
+		data_vec =  _data->obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive);
+	}
+	catch (search_tree<tkey, tdata *>::obtaining_of_nonexistent_key_attempt_exception const &)
+	{
+		throw;
+		// TODO
+	}
+	
+	std::vector<typename associative_container<tkey, tvalue>::key_value_pair> value_vec;
+	value_vec.reserve(data_vec.size());
+	
+	for (auto kvp : data_vec)
+	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			value_vec.emplace_back(kvp.key, dynamic_cast<file_tdata *>(kvp.value)->deserialize(path));
+		}
+		else
+		{
+			value_vec.emplace_back(kvp.key, dynamic_cast<ram_tdata *>(kvp.value)->value);
+		}
+	}
+	
+	return value_vec;
+}
 
 
 void db_storage::collection::clear()
@@ -135,7 +331,7 @@ void db_storage::collection::clear()
 void db_storage::collection::copy_from(
 	collection const &other)
 {
-	switch (_variant = other._variant)
+	switch (_tree_variant = other._tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -148,8 +344,8 @@ void db_storage::collection::copy_from(
 	default:
 		try
 		{
-			_data = new b_tree<tkey, tvalue>(
-				*dynamic_cast<b_tree<tkey, tvalue> *>(other._data));
+			_data = new b_tree<tkey, tdata *>(
+				*dynamic_cast<b_tree<tkey, tdata *> *>(other._data));
 		}
 		catch (std::bad_alloc const &)
 		{
@@ -158,12 +354,14 @@ void db_storage::collection::copy_from(
 		}
 		break;
 	}
+	
+	// TODO ALLOCATORS
 };
 
 void db_storage::collection::move_from(
 	collection &&other)
 {
-	switch (_variant = other._variant)
+	switch (_tree_variant = other._tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -176,8 +374,8 @@ void db_storage::collection::move_from(
 	default:
 		try
 		{
-			_data = new b_tree<tkey, tvalue>(
-				std::move(*dynamic_cast<b_tree<tkey, tvalue> *>(other._data)));
+			_data = new b_tree<tkey, tdata *>(
+				std::move(*dynamic_cast<b_tree<tkey, tdata *> *>(other._data)));
 		}
 		catch (std::bad_alloc const &)
 		{
@@ -188,17 +386,24 @@ void db_storage::collection::move_from(
 	}
 	
 	other._data = nullptr;
+	
+	// TODO ALLOCATORS
 };
+
+[[nodiscard]] inline allocator *db_storage::collection::get_allocator() const
+{
+	return _allocator;
+}
 
 #pragma endregion collection implementation
 
 #pragma region scheme implementation
 
 db_storage::schema::schema(
-	search_tree_variant variant,
+	search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	switch (variant)
+	switch (tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -265,10 +470,11 @@ db_storage::schema &db_storage::schema::operator=(
 
 void db_storage::schema::add(
 	std::string const &collection_name,
-	search_tree_variant variant,
+	search_tree_variant tree_variant,
+	db_storage::allocator_variant allocator_variant,
 	size_t t_for_b_trees)
 {
-	_collections->insert(collection_name, collection(variant, t_for_b_trees));
+	_collections->insert(collection_name, collection(tree_variant, allocator_variant, t_for_b_trees));
 }
 
 void db_storage::schema::dispose(
@@ -292,7 +498,7 @@ void db_storage::schema::clear()
 void db_storage::schema::copy_from(
 	schema const &other)
 {
-	switch (_variant = other._variant)
+	switch (_tree_variant = other._tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -320,7 +526,7 @@ void db_storage::schema::copy_from(
 void db_storage::schema::move_from(
 	schema &&other)
 {
-	switch (_variant = other._variant)
+	switch (_tree_variant = other._tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -352,10 +558,10 @@ void db_storage::schema::move_from(
 #pragma region pool implementation
 
 db_storage::pool::pool(
-	search_tree_variant variant,
+	search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	switch (variant)
+	switch (tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -422,10 +628,10 @@ db_storage::pool &db_storage::pool::operator=(
 
 void db_storage::pool::add(
 	std::string const &schema_name,
-	search_tree_variant variant,
+	search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	_schemas->insert(schema_name, schema(variant, t_for_b_trees));
+	_schemas->insert(schema_name, schema(tree_variant, t_for_b_trees));
 }
 
 void db_storage::pool::dispose(
@@ -449,7 +655,7 @@ void db_storage::pool::clear()
 void db_storage::pool::copy_from(
 	db_storage::pool const &other)
 {
-	switch (_variant = other._variant)
+	switch (_tree_variant = other._tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -477,7 +683,7 @@ void db_storage::pool::copy_from(
 void db_storage::pool::move_from(
 	db_storage::pool &&other)
 {
-	switch (_variant = other._variant)
+	switch (_tree_variant = other._tree_variant)
 	{
 	case search_tree_variant::b:
 		//break;
@@ -538,11 +744,11 @@ db_storage *db_storage::set_mode(
 
 db_storage *db_storage::add_pool(
 	std::string const &pool_name,
-	db_storage::search_tree_variant variant,
+	db_storage::search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
 	throw_if_uninutialized_at_perform()
-		.add(pool_name, variant, t_for_b_trees);
+		.add(pool_name, tree_variant, t_for_b_trees);
 	
 	return this;
 }
@@ -559,7 +765,7 @@ db_storage *db_storage::dispose_pool(
 db_storage *db_storage::add_schema(
 	std::string const &pool_name,
 	std::string const &schema_name,
-	db_storage::search_tree_variant variant,
+	db_storage::search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
 	throw_if_uninutialized_at_perform()
@@ -567,7 +773,7 @@ db_storage *db_storage::add_schema(
 		.throw_if_invalid_file_name(schema_name)
 		.throw_if_path_is_too_long(pool_name, schema_name)
 		.obtain(pool_name)
-		.add(schema_name, variant, t_for_b_trees);
+		.add(schema_name, tree_variant, t_for_b_trees);
 	
 	return this;
 }
@@ -587,7 +793,8 @@ db_storage *db_storage::add_collection(
 	std::string const &pool_name,
 	std::string const &schema_name,
 	std::string const &collection_name,
-	db_storage::search_tree_variant variant,
+	db_storage::search_tree_variant tree_variant,
+	db_storage::allocator_variant allocator_variant,
 	size_t t_for_b_trees)
 {
 	throw_if_uninutialized_at_perform()
@@ -596,7 +803,7 @@ db_storage *db_storage::add_collection(
 		.throw_if_path_is_too_long(pool_name, schema_name, collection_name)
 		.obtain(pool_name)
 		.obtain(schema_name)
-		.add(collection_name, variant, t_for_b_trees);
+		.add(collection_name, tree_variant, allocator_variant, t_for_b_trees);
 	
 	return this;
 }
@@ -626,7 +833,7 @@ db_storage *db_storage::add(
 		.obtain(pool_name)
 		.obtain(schema_name)
 		.obtain(collection_name)
-		.insert(key, value);
+		.insert(key, value, make_path(pool_name, schema_name, collection_name));
 	
 	return this;
 }
@@ -637,13 +844,13 @@ db_storage *db_storage::add(
 	std::string const &collection_name,
 	tkey const &key,
 	tvalue &&value)
-{
+{	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(pool_name, schema_name, collection_name)
 		.obtain(pool_name)
 		.obtain(schema_name)
 		.obtain(collection_name)
-		.insert(key, std::move(value));
+		.insert(key, std::move(value), make_path(pool_name, schema_name, collection_name));
 	
 	return this;
 }
@@ -660,7 +867,9 @@ db_storage *db_storage::update(
 		.obtain(pool_name)
 		.obtain(schema_name)
 		.obtain(collection_name)
-		.update(key, value);
+		.update(key, value, make_path(pool_name, schema_name, collection_name));
+	
+	// serialize
 	
 	return this;
 }
@@ -677,7 +886,7 @@ db_storage *db_storage::update(
 		.obtain(pool_name)
 		.obtain(schema_name)
 		.obtain(collection_name)
-		.update(key, std::move(value));
+		.update(key, std::move(value), make_path(pool_name, schema_name, collection_name));
 	
 	return this;
 }
@@ -693,7 +902,7 @@ db_storage *db_storage::dispose(
 		.obtain(pool_name)
 		.obtain(schema_name)
 		.obtain(collection_name)
-		.dispose(key);
+		.dispose(key, make_path(pool_name, schema_name, collection_name));
 	
 	return this;
 }
@@ -709,7 +918,7 @@ tvalue db_storage::obtain(
 			.obtain(pool_name)
 			.obtain(schema_name)
 			.obtain(collection_name)
-			.obtain(key);
+			.obtain(key, make_path(pool_name, schema_name, collection_name));
 }
 
 std::vector<typename associative_container<tkey, tvalue>::key_value_pair>
@@ -727,7 +936,8 @@ db_storage::obtain_between(
 			.obtain(pool_name)
 			.obtain(schema_name)
 			.obtain(collection_name)
-			.obtain_between(lower_bound, upper_bound, lower_bound_inclusive,upper_bound_inclusive);
+			.obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive,
+					make_path(pool_name, schema_name, collection_name));
 }
 
 #pragma endregion db storage public operations implementation
@@ -736,10 +946,10 @@ db_storage::obtain_between(
 
 void db_storage::add(
 	std::string const &pool_name,
-	search_tree_variant variant,
+	search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	_pools.insert(pool_name, pool(variant, t_for_b_trees));
+	_pools.insert(pool_name, pool(tree_variant, t_for_b_trees));
 }
 
 void db_storage::dispose(
