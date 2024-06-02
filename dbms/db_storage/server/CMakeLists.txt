@@ -4,10 +4,6 @@ project(os_cw_dbms_db_strg_srvr)
 add_executable(
         os_cw_dbms_db_strg_srvr
         db_storage_server.cpp)
-target_include_directories(
-        os_cw_dbms_db_strg_srvr
-        PUBLIC
-        ./include)
 target_link_libraries(
         os_cw_dbms_db_strg_srvr
         PUBLIC
@@ -15,7 +11,7 @@ target_link_libraries(
 target_link_libraries(
         os_cw_dbms_db_strg_srvr
         PUBLIC
-        os_cw_dbms_tdata)
+        os_cw_dbms_cmmn_types)
 set_target_properties(
         os_cw_dbms_db_strg_srvr PROPERTIES
         LANGUAGES CXX

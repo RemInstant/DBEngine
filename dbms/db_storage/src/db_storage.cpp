@@ -3,6 +3,50 @@
 #include "../include/db_storage.h"
 
 
+#pragma region exceptions implementation
+
+db_storage::invalid_struct_name_exception::invalid_struct_name_exception():
+		logic_error("got invalid db structural element name")
+{ }
+
+db_storage::too_big_struct_name_exception::too_big_struct_name_exception():
+		logic_error("got too big db structural element name")
+{ }
+
+db_storage::invalid_path_exception::invalid_path_exception():
+		logic_error("got invalid path")
+{ }
+
+db_storage::too_big_path_exception::too_big_path_exception():
+		logic_error("got too big path")
+{ }
+
+db_storage::insertion_of_existent_struct_attempt_exception::insertion_of_existent_struct_attempt_exception():
+	logic_error("attempt to add existent struct to database")
+{ }
+
+db_storage::disposal_of_nonexistent_struct_attempt_exception::disposal_of_nonexistent_struct_attempt_exception():
+	logic_error("attempt to dispose non-existent struct from database")
+{ }
+
+db_storage::insertion_of_existent_key_attempt_exception::insertion_of_existent_key_attempt_exception():
+	logic_error("attempt to insert existent key into table")
+{ }
+
+db_storage::obtaining_of_nonexistent_key_attempt_exception::obtaining_of_nonexistent_key_attempt_exception():
+	logic_error("attempt to obtain non-existent key from table")
+{ }
+
+db_storage::updating_of_nonexistent_key_attempt_exception::updating_of_nonexistent_key_attempt_exception():
+	logic_error("attempt to update non-existent key in table")
+{ }
+
+db_storage::disposal_of_nonexistent_key_attempt_exception::disposal_of_nonexistent_key_attempt_exception():
+	logic_error("attempt to dispose non-existent key from table")
+{ }
+
+#pragma endregion exceptions implementation
+
 #pragma region collection implementation
 
 db_storage::collection::collection(
@@ -110,16 +154,16 @@ void db_storage::collection::insert(
 	{
 		_data->insert(key, data);
 	}
-	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception const &)
+	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
 		deallocate_with_guard(data);
-		throw;
+		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
 	}
 	
 	if (get_instance()->_mode == mode::file_system)
 	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -154,16 +198,16 @@ void db_storage::collection::insert(
 	{
 		_data->insert(key, data);
 	}
-	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception const &)
+	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
 		deallocate_with_guard(data);
-		throw;
+		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
 	}
 	
 	if (get_instance()->_mode == mode::file_system)
 	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -194,11 +238,20 @@ void db_storage::collection::update(
 		// TODO
 	}
 	
-	_data->update(key, data);
+	try
+	{
+		_data->update(key, data);
+	}
+	catch (search_tree<tkey, tdata *>::updating_of_nonexistent_key_attempt_exception const &)
+	{
+		deallocate_with_guard(data);
+		throw db_storage::updating_of_nonexistent_key_attempt_exception();
+		// TODO
+	}
 	
 	if (get_instance()->_mode == mode::file_system)
 	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -229,11 +282,20 @@ void db_storage::collection::update(
 		// TODO
 	}
 	
-	_data->update(key, data);
+	try
+	{
+		_data->update(key, data);
+	}
+	catch (search_tree<tkey, tdata *>::updating_of_nonexistent_key_attempt_exception const &)
+	{
+		deallocate_with_guard(data);
+		throw db_storage::updating_of_nonexistent_key_attempt_exception();
+		// TODO
+	}
 	
 	if (get_instance()->_mode == mode::file_system)
 	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, value);
+		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -249,7 +311,7 @@ void db_storage::collection::dispose(
 	}
 	catch (search_tree<tkey, tdata *>::disposal_of_nonexistent_key_attempt_exception)
 	{
-		throw;
+		throw db_storage::disposal_of_nonexistent_key_attempt_exception();
 		// TODO
 	}
 	
@@ -269,7 +331,7 @@ tvalue db_storage::collection::obtain(
 	}
 	catch (search_tree<tkey, tdata *>::obtaining_of_nonexistent_key_attempt_exception)
 	{
-		throw;
+		throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
 		// TODO
 	}
 	
@@ -299,7 +361,7 @@ db_storage::collection::obtain_between(
 	}
 	catch (search_tree<tkey, tdata *>::obtaining_of_nonexistent_key_attempt_exception const &)
 	{
-		throw;
+		throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
 		// TODO
 	}
 	
@@ -474,19 +536,43 @@ void db_storage::schema::add(
 	db_storage::allocator_variant allocator_variant,
 	size_t t_for_b_trees)
 {
-	_collections->insert(collection_name, collection(tree_variant, allocator_variant, t_for_b_trees));
+	try
+	{
+		_collections->insert(collection_name, collection(tree_variant, allocator_variant, t_for_b_trees));
+	}
+	catch (search_tree<std::string, collection>::insertion_of_existent_key_attempt_exception_exception const &)
+	{
+		throw db_storage::insertion_of_existent_struct_attempt_exception();
+		// TODO;
+	}
 }
 
 void db_storage::schema::dispose(
 	std::string const &collection_name)
 {
-	_collections->dispose(collection_name);
+	try
+	{
+		_collections->dispose(collection_name);
+	}
+	catch (search_tree<std::string, collection>::disposal_of_nonexistent_key_attempt_exception const &)
+	{
+		throw db_storage::disposal_of_nonexistent_struct_attempt_exception();
+		// TODO;
+	}
 }
 
 db_storage::collection &db_storage::schema::obtain(
 	std::string const &collection_name)
 {
-	return _collections->obtain(collection_name);
+	try
+	{
+		return _collections->obtain(collection_name);
+	}
+	catch (search_tree<std::string, collection>::obtaining_of_nonexistent_key_attempt_exception const &)
+	{
+		throw db_storage::invalid_path_exception();
+		// TODO;
+	}
 }
 
 void db_storage::schema::clear()
@@ -631,19 +717,43 @@ void db_storage::pool::add(
 	search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	_schemas->insert(schema_name, schema(tree_variant, t_for_b_trees));
+	try
+	{
+		_schemas->insert(schema_name, schema(tree_variant, t_for_b_trees));
+	}
+	catch (search_tree<std::string, schema>::insertion_of_existent_key_attempt_exception_exception const &)
+	{
+		throw db_storage::insertion_of_existent_struct_attempt_exception();
+		// TODO;
+	}
 }
 
 void db_storage::pool::dispose(
 	std::string const &schema_name)
 {
-	_schemas->dispose(schema_name);
+	try
+	{
+		_schemas->dispose(schema_name);
+	}
+	catch (search_tree<std::string, schema>::disposal_of_nonexistent_key_attempt_exception const &)
+	{
+		throw db_storage::disposal_of_nonexistent_struct_attempt_exception();
+		// TODO;
+	}
 }
 
 db_storage::schema &db_storage::pool::obtain(
 	std::string const &schema_name)
 {
-	return _schemas->obtain(schema_name);
+	try
+	{
+		return _schemas->obtain(schema_name);
+	}
+	catch (search_tree<std::string, schema>::obtaining_of_nonexistent_key_attempt_exception const &)
+	{
+		throw db_storage::invalid_path_exception();
+		// TODO;
+	}
 }
 
 void db_storage::pool::clear()
@@ -724,7 +834,8 @@ db_storage *db_storage::get_instance()
 
 db_storage::db_storage():
 	_pools(8),
-	_mode(mode::uninitialized)
+	_mode(mode::uninitialized),
+	_records_cnt(0)
 { }
 
 #pragma endregion db storage instance getter and constructor implementation
@@ -940,6 +1051,11 @@ db_storage::obtain_between(
 					make_path(pool_name, schema_name, collection_name));
 }
 
+size_t db_storage::get_records_cnt()
+{
+	return _records_cnt;
+}
+
 #pragma endregion db storage public operations implementation
 
 #pragma region db storage utility data operations implementation
@@ -949,22 +1065,72 @@ void db_storage::add(
 	search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	_pools.insert(pool_name, pool(tree_variant, t_for_b_trees));
+	try
+	{
+		_pools.insert(pool_name, pool(tree_variant, t_for_b_trees));
+	}
+	catch (search_tree<std::string, pool>::insertion_of_existent_key_attempt_exception_exception const &)
+	{
+		throw db_storage::insertion_of_existent_struct_attempt_exception();
+		// TODO;
+	}
 }
 
 void db_storage::dispose(
 	std::string const &pool_name)
 {
-	_pools.dispose(pool_name);
+	try
+	{
+		_pools.dispose(pool_name);
+	}
+	catch (search_tree<std::string, pool>::disposal_of_nonexistent_key_attempt_exception const &)
+	{
+		throw db_storage::disposal_of_nonexistent_struct_attempt_exception();
+		// TODO;
+	}
 }
 
 db_storage::pool &db_storage::obtain(
 	std::string const &pool_name)
 {
-	return _pools.obtain(pool_name);
+	try
+	{
+		return _pools.obtain(pool_name);
+	}
+	catch (search_tree<std::string, pool>::obtaining_of_nonexistent_key_attempt_exception const &)
+	{
+		throw db_storage::invalid_path_exception();
+		// TODO;
+	}
 }
 
 #pragma endregion db storage utility data operations implementation
+
+#pragma region db storage utility common operations
+
+std::string db_storage::make_path(
+	std::string const &pool_name,
+	std::string const &schema_name,
+	std::string const &collection_name)
+{
+	std::string str = "";
+	str.reserve(pool_name.size() + schema_name.size() + collection_name.size());
+	
+	str += pool_name;
+	
+	if (schema_name.size())
+	{
+		str += "/" + schema_name;
+	}
+	if (collection_name.size())
+	{
+		str += "/" + collection_name;
+	}
+	
+	return str;
+}
+
+#pragma endregion db storage utility common operations
 
 #pragma region db storage validators implementation
 

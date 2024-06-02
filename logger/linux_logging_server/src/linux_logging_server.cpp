@@ -183,13 +183,7 @@ void terminal_reader()
         if (cmd == "shutdown")
         {
             msg.mtype = SHUTDOWN_PRIOR;
-            
-            #ifdef __linux__
-            msgsnd(mq_descriptor, &msg, sizeof(msg_t), 0);
-            #endif
-            
-            run_flag = 0;
-            
+            msgsnd(mq_descriptor, &msg, sizeof(msg_t), 0);\
             break;
         }
     }

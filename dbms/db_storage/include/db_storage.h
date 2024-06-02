@@ -1,3 +1,6 @@
+#ifndef OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE
+#define OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE
+
 #include <search_tree.h>
 #include <b_tree.h>
 #include <allocator.h>
@@ -31,6 +34,112 @@ public:
 		boundary_tags,
 		red_black_tree
 	};
+
+public:
+
+#pragma region exceptions
+
+	class invalid_struct_name_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        invalid_struct_name_exception();
+	
+	};
+	
+	class too_big_struct_name_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        too_big_struct_name_exception();
+	
+	};
+	
+	class invalid_path_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        invalid_path_exception();
+	
+	};
+	
+	class too_big_path_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        too_big_path_exception();
+	
+	};
+	
+	class insertion_of_existent_struct_attempt_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        insertion_of_existent_struct_attempt_exception();
+	
+	};
+	
+	class disposal_of_nonexistent_struct_attempt_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        disposal_of_nonexistent_struct_attempt_exception();
+	
+	};
+	
+	class insertion_of_existent_key_attempt_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        insertion_of_existent_key_attempt_exception();
+	
+	};
+	
+	class obtaining_of_nonexistent_key_attempt_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        obtaining_of_nonexistent_key_attempt_exception();
+	
+	};
+	
+	class updating_of_nonexistent_key_attempt_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        updating_of_nonexistent_key_attempt_exception();
+	
+	};
+	
+	class disposal_of_nonexistent_key_attempt_exception final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        disposal_of_nonexistent_key_attempt_exception();
+	
+	};
+
+#pragma endregion exceptions
 
 private:
 
@@ -237,6 +346,7 @@ private:
 
 	b_tree<std::string, pool> _pools;
 	mode _mode;
+	size_t _records_cnt;
 
 public:
 
@@ -334,6 +444,8 @@ public:
         tkey const &upper_bound,
         bool lower_bound_inclusive,
         bool upper_bound_inclusive);
+	
+	size_t get_records_cnt();
 
 private:
 
@@ -386,3 +498,5 @@ private:
 		std::string const &collection_name = "");
 
 };
+
+#endif //OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE

@@ -1,6 +1,9 @@
+#ifndef OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_COMMON_TYPES_TDATA
+#define OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_COMMON_TYPES_TDATA
+
 #include <allocator.h>
 
-using tkey = char *;
+using tkey = std::string;
 
 class tkey_comparer final
 {
@@ -19,29 +22,29 @@ class tvalue final
 public:
 
 	uint64_t hashed_password;
-	char *name;
+	std::string name;
 
 public:
-
+	
 	tvalue(
 		uint64_t hashed_password,
-		char *name);
+		std::string const &name);
 
 public:
 
-	~tvalue();
+	// ~tvalue();
 	
-	tvalue(
-		tvalue const &other);
+	// tvalue(
+	// 	tvalue const &other);
 	
-	tvalue operator=(
-		tvalue const &other);
+	// tvalue operator=(
+	// 	tvalue const &other);
 	
-	tvalue(
-		tvalue &&other) noexcept;
+	// tvalue(
+	// 	tvalue &&other) noexcept;
 	
-	tvalue operator=(
-		tvalue &&other) noexcept;
+	// tvalue operator=(
+	// 	tvalue &&other) noexcept;
 
 };
 
@@ -84,9 +87,12 @@ public:
 
 	void serialize(
 		std::string const &path,
-		tvalue const &data);
+		tkey const &key,
+		tvalue const &value);
 	
 	tvalue deserialize(
 		std::string const &path) const;
 
 };
+
+#endif //OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_COMMON_TYPES_TDATA

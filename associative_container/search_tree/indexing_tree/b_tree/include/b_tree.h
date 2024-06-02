@@ -168,7 +168,7 @@ private:
 
     void insert_inner(
         typename associative_container<tkey, tvalue>::key_value_pair &&kvp,
-        bool can_update);
+        bool is_update);
 
 private:
 
@@ -469,22 +469,27 @@ template<
     typename tvalue>
 void b_tree<tkey, tvalue>::insert_inner(
     typename associative_container<tkey, tvalue>::key_value_pair &&kvp,
-    bool can_update)
+    bool is_update)
 {
     auto path = this->find_path(kvp.key);
     
     if (path.top().second >= 0)
     {
-        if (can_update)
+        if (is_update)
         {
             (*path.top().first)->keys_and_values[path.top().second] = std::move(kvp);
         }
         else
         {
-            throw typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception(kvp.key);
+            throw typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception_exception(kvp.key);
         }
         
         return;
+    }
+    
+    if (is_update)
+    {
+        throw typename search_tree<tkey, tvalue>::updating_of_nonexistent_key_attempt_exception(kvp.key);
     }
     
     if (*path.top().first == nullptr && path.size() == 1)
@@ -549,9 +554,14 @@ void b_tree<tkey, tvalue>::insert(
     {
         insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, value)), false);
     }
-    catch (typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception const &)
+    catch (typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception_exception const &)
     {
         this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : attempt to insert key duplicate.");
+        throw;
+    }
+    catch (std::bad_alloc const &)
+    {
+        this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : bad alloc occurred.");
         throw;
     }
     
@@ -575,14 +585,18 @@ void b_tree<tkey, tvalue>::insert(
     
     try
     {
-        insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, value)), false);
+        insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, std::move(value))), false);
     }
-    catch (typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception const &)
+    catch (typename search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception_exception const &)
     {
         this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : attempt to insert key duplicate.");
         throw;
     }
-    // TODO CATCH BAD ALLOC?
+    catch (std::bad_alloc const &)
+    {
+        this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : bad alloc occurred.");
+        throw;
+    }
     
     this->trace_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.")
         ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.");
@@ -602,7 +616,20 @@ void b_tree<tkey, tvalue>::update(
         ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : inserting node with key \"" + 
             extra_utility::make_string(key) + "\"");
     
-    insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, value)), true);
+    try
+    {
+        insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, value)), true);
+    }
+    catch (typename search_tree<tkey, tvalue>::updating_of_nonexistent_key_attempt_exception const &)
+    {
+        this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : attempt to update value by non-existent key.");
+        throw;
+    }
+    catch (std::bad_alloc const &)
+    {
+        this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : bad alloc occurred.");
+        throw;
+    }
     
     this->trace_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : successfuly finished.")
         ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : successfuly finished.");
@@ -622,7 +649,20 @@ void b_tree<tkey, tvalue>::update(
         ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : inserting node with key \"" + 
             extra_utility::make_string(key) + "\"");
     
-    insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, std::move(value))), true);
+    try
+    {
+        insert_inner(std::move(typename associative_container<tkey, tvalue>::key_value_pair(key, std::move(value))), true);
+    }
+    catch (typename search_tree<tkey, tvalue>::updating_of_nonexistent_key_attempt_exception const &)
+    {
+        this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : attempt to update value by non-existent key.");
+        throw;
+    }
+    catch (std::bad_alloc const &)
+    {
+        this->error_with_guard(get_typename() + "::insert(tkey const &, tvalue const &) : bad alloc occurred.");
+        throw;
+    }
     
     this->trace_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.")
         ->debug_with_guard(get_typename() + "::insert(tkey const &, tvalue &&) : successfuly finished.");
@@ -885,7 +925,12 @@ b_tree<tkey, tvalue>::b_tree(
     logger *logger):
         search_tree<tkey, tvalue>(keys_comparer, allocator, logger),
         _t(t)
-{ }
+{
+    if (t < 2)
+    {
+        throw std::logic_error("parameter t must be not less than 2");
+    }
+}
 
 template<
     typename tkey,

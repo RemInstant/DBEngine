@@ -50,7 +50,7 @@ public:
     
     #pragma region target operations associated exception types
     
-    class insertion_of_existent_key_attempt_exception final:
+    class insertion_of_existent_key_attempt_exception_exception final:
         public std::logic_error
     {
     
@@ -60,7 +60,7 @@ public:
     
     public:
         
-        explicit insertion_of_existent_key_attempt_exception(
+        explicit insertion_of_existent_key_attempt_exception_exception(
             tkey const &key);
         
     public:
@@ -80,6 +80,25 @@ public:
     public:
         
         explicit obtaining_of_nonexistent_key_attempt_exception(
+            tkey const &key);
+        
+    public:
+        
+        tkey const &get_key() const noexcept;
+        
+    };
+    
+    class updating_of_nonexistent_key_attempt_exception final:
+        public std::logic_error
+    {
+    
+    private:
+        
+        tkey _key;
+        
+    public:
+        
+        explicit updating_of_nonexistent_key_attempt_exception(
             tkey const &key);
         
     public:
@@ -216,7 +235,7 @@ search_tree<tkey, tvalue>::common_node::~common_node() noexcept
 template<
     typename tkey,
     typename tvalue>
-search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception::insertion_of_existent_key_attempt_exception(
+search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception_exception::insertion_of_existent_key_attempt_exception_exception(
     tkey const &key):
         std::logic_error("Attempt to insert already existing key inside the tree."),
         _key(key)
@@ -225,7 +244,7 @@ search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception::insertio
 template<
     typename tkey,
     typename tvalue>
-tkey const &search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception::get_key() const noexcept
+tkey const &search_tree<tkey, tvalue>::insertion_of_existent_key_attempt_exception_exception::get_key() const noexcept
 {
     return _key;
 }
@@ -243,6 +262,23 @@ template<
     typename tkey,
     typename tvalue>
 tkey const &search_tree<tkey, tvalue>::obtaining_of_nonexistent_key_attempt_exception::get_key() const noexcept
+{
+    return _key;
+}
+
+template<
+    typename tkey,
+    typename tvalue>
+search_tree<tkey, tvalue>::updating_of_nonexistent_key_attempt_exception::updating_of_nonexistent_key_attempt_exception(
+    tkey const &key):
+        std::logic_error("Attempt to update a value by non-existing key from the tree."),
+        _key(key)
+{ }
+
+template<
+    typename tkey,
+    typename tvalue>
+tkey const &search_tree<tkey, tvalue>::updating_of_nonexistent_key_attempt_exception::get_key() const noexcept
 {
     return _key;
 }

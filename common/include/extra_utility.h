@@ -20,6 +20,7 @@ namespace extra_utility
     template<> std::string make_string(double const &value);
     template<> std::string make_string(long double const &value);
     template<> std::string make_string(std::string const &value);
+    template<> std::string make_string(char * const &value);
     
 }
 
