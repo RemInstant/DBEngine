@@ -158,18 +158,23 @@ void db_storage::collection::insert(
 	
 	try
 	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
+		}
+		
 		_data->insert(key, data);
+	}
+	catch (std::ios::failure const &)
+	{
+		deallocate_with_guard(data);
+		throw std::ios::failure("Failed to write data");
 	}
 	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
 		deallocate_with_guard(data);
 		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
-	}
-	
-	if (get_instance()->_mode == mode::file_system)
-	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 

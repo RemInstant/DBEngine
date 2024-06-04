@@ -102,7 +102,7 @@ void file_tdata::serialize(
 	
     if (!data_stream.is_open())
     {
-        throw std::runtime_error("File error!");
+        throw std::ios::failure("Cannot open the file");
     }
 	
 	// TODO UPDATE WITH BIGGER DATA
@@ -125,31 +125,45 @@ void file_tdata::serialize(
     data_stream.write(reinterpret_cast<char const *>(&name_len), sizeof(size_t));
     data_stream.write(value.name.c_str(), sizeof(char) * name_len);
 	data_stream.flush();
+	
+	if (data_stream.fail())
+	{
+		throw std::ios::failure("An error occured while serializing data");
+	}
 }
 
 tvalue file_tdata::deserialize(
 	std::string const &path) const
 {
-	std::ifstream file(path, std::ios::binary);
-    if (!file.is_open() || _file_pos == -1)
+	std::ifstream data_stream(path, std::ios::binary);
+    if (!data_stream.is_open())
     {
-        throw std::runtime_error("File error!");
+        throw std::ios::failure("Cannot open the file");
     }
+	if (_file_pos == 1)
+	{
+		throw std::logic_error("Invalid pointer to data");
+	}
 
-    file.seekg(_file_pos, std::ios::beg);
+    data_stream.seekg(_file_pos, std::ios::beg);
 	
 	tvalue value;
 	size_t login_len, name_len;
 	
-	file.read(reinterpret_cast<char *>(&login_len), sizeof(size_t));
-	file.seekg(login_len, std::ios::cur);
-    file.read(reinterpret_cast<char *>(&value.hashed_password), sizeof(size_t));
-	file.read(reinterpret_cast<char *>(&name_len), sizeof(size_t));
+	data_stream.read(reinterpret_cast<char *>(&login_len), sizeof(size_t));
+	data_stream.seekg(login_len, std::ios::cur);
+    data_stream.read(reinterpret_cast<char *>(&value.hashed_password), sizeof(size_t));
+	data_stream.read(reinterpret_cast<char *>(&name_len), sizeof(size_t));
 	
 	value.name.resize(name_len);
 	for (auto &ch : value.name)
 	{
-		file.read(&ch, sizeof(char));
+		data_stream.read(&ch, sizeof(char));
+	}
+	
+	if (data_stream.fail())
+	{
+		throw std::ios::failure("An error occured while deserializing data");
 	}
 	
     return value;

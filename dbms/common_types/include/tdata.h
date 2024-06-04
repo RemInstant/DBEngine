@@ -3,7 +3,7 @@
 
 #include <allocator.h>
 
-using tkey = std::string;
+using tkey = std::string; // flyweight
 
 class tkey_comparer final
 {
@@ -14,6 +14,8 @@ public:
         tkey const &lhs,
         tkey const &rhs) const;
 
+	// flyweight comparer
+
 };
 
 class tvalue final
@@ -22,7 +24,7 @@ class tvalue final
 public:
 
 	uint64_t hashed_password;
-	std::string name;
+	std::string name; // flyweight
 
 public:
 	

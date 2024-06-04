@@ -48,7 +48,7 @@ int main()
 	// db->dispose("p", "s", "c", "4");
 	
     std::thread cmd_thread(terminal_reader);
-    
+	
     while (run_flag)
     {
         ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, -db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR, MSG_NOERROR);
@@ -196,7 +196,7 @@ int main()
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
-			case db_ipc::command::DISPOSE_POOL:
+			case db_ipc::command::DISPOSE_POOL: // Todo
 				break;
 			case db_ipc::command::DISPOSE_SCHEMA:
 				break;

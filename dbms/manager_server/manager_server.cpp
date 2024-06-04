@@ -281,7 +281,8 @@ pid_t run_storage_server(
 		return;
 	}
 	
-	
+	sleep(1);
+	waitpid(pid, NULL, WNOHANG);
 	
 	
 }

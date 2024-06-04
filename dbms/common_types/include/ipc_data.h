@@ -55,6 +55,7 @@ namespace db_ipc
 	enum class command_status
 	{
 		OK,
+		OBTAIN_BETWEEN_END,
 		
 		BAD_ALLOC,
 		
