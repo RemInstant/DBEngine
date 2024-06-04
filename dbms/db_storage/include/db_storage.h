@@ -200,7 +200,7 @@ private:
 			tvalue &&value,
 			std::string const &path);
 		
-		void dispose(
+		tvalue dispose(
 			tkey const &key,
 			std::string const &path);
 		
@@ -208,11 +208,22 @@ private:
 			tkey const &key,
 			std::string const &path);
 		
-		std::vector<typename associative_container<tkey, tvalue>::key_value_pair> obtain_between(
+		std::vector<std::pair<tkey, tvalue>> obtain_between(
 			tkey const &lower_bound,
 			tkey const &upper_bound,
 			bool lower_bound_inclusive,
 			bool upper_bound_inclusive,
+			std::string const &path);
+	
+	public:
+	
+		void load(
+			tkey const &key,
+			tvalue &&value,
+			std::string const &path,
+			long file_pos);
+	
+		void consolidate(
 			std::string const &path);
 	
 	private:
@@ -275,6 +286,11 @@ private:
 		collection &obtain(
 			std::string const &collection_name);
 	
+	public:
+	
+		void consolidate(
+			std::string const &path);
+	
 	private:
 	
 		void clear();
@@ -330,6 +346,11 @@ private:
 		schema &obtain(
 			std::string const &schema_name);
 	
+	public:
+	
+		void consolidate(
+			std::string const &path);
+	
 	private:
 	
 		void clear();
@@ -344,8 +365,9 @@ private:
 
 private:
 
-	b_tree<std::string, pool> _pools;
+	size_t _id;
 	mode _mode;
+	b_tree<std::string, pool> _pools;
 	size_t _records_cnt;
 
 public:
@@ -362,8 +384,12 @@ public:
 
 public:
 
-	db_storage *set_mode(
+	db_storage *setup(
+		size_t id,
 		mode mode);
+	
+	db_storage *load_db(
+		std::string path);
 
 	db_storage *add_pool(
 		std::string const &pool_name,
@@ -424,7 +450,7 @@ public:
 		tkey const &key,
 		tvalue const &value);
 	
-	db_storage *dispose(
+	tvalue dispose(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
@@ -436,7 +462,7 @@ public:
 		std::string const &collection_name,
 		tkey const &key);
 	
-	std::vector<typename associative_container<tkey, tvalue>::key_value_pair> obtain_between(
+	std::vector<std::pair<tkey, tvalue>> obtain_between(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name,
@@ -445,6 +471,8 @@ public:
         bool lower_bound_inclusive,
         bool upper_bound_inclusive);
 	
+	db_storage *consolidate();
+
 	size_t get_records_cnt();
 
 private:
@@ -463,39 +491,37 @@ private:
 	
 	pool &obtain(
 		std::string const &pool_name);
-
+	
+	void load_collection(
+		std::string prefix,
+		std::string pool_name,
+		std::string schema_name,
+		std::string collection_name);
+		
 private:
 
 	static std::string make_path(
-		std::string const &pool_name,
-		std::string const &schema_name = "",
-		std::string const &collection_name = "");
+		std::initializer_list<std::string> list);
+	
 
 private:
-
-	db_storage &throw_if_uninitialized(
-		mode mode,
-		std::string const &exception_message);
 	
 	db_storage &throw_if_initialized_at_setup();
 	
-	db_storage &throw_if_uninitialized_at_setup(
-		mode mode);
+	db_storage &throw_if_invalid_setup(
+		size_t id,
+		db_storage::mode mode);
 	
 	db_storage &throw_if_uninutialized_at_perform();
 	
 	db_storage &throw_if_invalid_path(
-		std::string const &pool_name,
-		std::string const &schema_name = "",
-		std::string const &collection_name = "");
+		std::string const &path);
 	
 	db_storage &throw_if_invalid_file_name(
 		std::string const &file_name);
 	
 	db_storage &throw_if_path_is_too_long(
-		std::string const &pool_name,
-		std::string const &schema_name = "",
-		std::string const &collection_name = "");
+		std::string const &path);
 
 };
 

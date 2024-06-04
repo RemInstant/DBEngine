@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cstring>
 #include <map>
 #include <thread>
 #include <sys/msg.h>
@@ -13,6 +14,8 @@ int run_flag = 1;
 int mq_descriptor = -1;
 
 void terminal_reader();
+
+#include "sys/stat.h"
 
 int main()
 {
@@ -27,7 +30,22 @@ int main()
         return 1;
     }
     
-	db->set_mode(db_storage::mode::in_memory_cache);
+	//db->set_mode(db_storage::mode::in_memory_cache);
+	db->setup(1, db_storage::mode::file_system);
+	db->load_db("pools");
+	
+	// db->add_pool("p", db_storage::search_tree_variant::b, 4);
+	// db->add_schema("p", "s", db_storage::search_tree_variant::b, 4);
+	// db->add_collection("p", "s", "c", db_storage::search_tree_variant::b, db_storage::allocator_variant::boundary_tags, 4);
+	
+	// db->add("p", "s", "c", "1", tvalue(1, "1"));
+	// db->add("p", "s", "c", "2", tvalue(2, "2"));
+	// db->add("p", "s", "c", "3", tvalue(3, "3"));
+	// db->add("p", "s", "c", "4", tvalue(4, "4"));
+	// db->add("p", "s", "c", "5", tvalue(5, "5"));
+	
+	// db->dispose("p", "s", "c", "2");
+	// db->dispose("p", "s", "c", "4");
 	
     std::thread cmd_thread(terminal_reader);
     
@@ -151,7 +169,7 @@ int main()
 				{
 					db->add_collection(msg.pool_name, msg.schema_name, msg.collection_name,
 							static_cast<db_storage::search_tree_variant>(msg.tree_variant),
-							static_cast<db_storage::allocator_variant>(msg.allocator_variant),
+							static_cast<db_storage::allocator_variant>(msg.alloc_variant),
 							msg.t_for_b_trees);
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
@@ -182,7 +200,7 @@ int main()
 				break;
 			case db_ipc::command::DISPOSE_SCHEMA:
 				break;
-			case db_ipc::command::DISPOSE_STORAGE:
+			case db_ipc::command::DISPOSE_COLLECTION:
 				break;
 			case db_ipc::command::ADD:
 			{
@@ -211,14 +229,62 @@ int main()
 				break;
 			}
 			case db_ipc::command::UPDATE:
+			{
+				try
+				{
+					db->update(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.hashed_password, msg.name));
+				}
+				catch (db_storage::invalid_struct_name_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (db_storage::updating_of_nonexistent_key_attempt_exception const &)
+				{
+					msg.status = db_ipc::command_status::ATTEMPT_TO_UPDATE_NONEXISTENT_KEY;
+				}
+				catch (std::bad_alloc const &)
+				{
+					msg.status = db_ipc::command_status::BAD_ALLOC;
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
+			}
 			case db_ipc::command::DISPOSE:
+			{
+				try
+				{
+					tvalue value = db->dispose(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
+					msg.hashed_password = value.hashed_password;
+					strcpy(msg.name, value.name.c_str());
+				}
+				catch (db_storage::invalid_struct_name_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (db_storage::disposal_of_nonexistent_key_attempt_exception const &)
+				{
+					msg.status = db_ipc::command_status::ATTEMPT_TO_DISPOSE_NONEXISTENT_KEY;
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
+			}
 			case db_ipc::command::OBTAIN:
 			{
 				try
 				{
-					db->obtain(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
+					tvalue value = db->obtain(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
+					msg.hashed_password = value.hashed_password;
+					strcpy(msg.name, value.name.c_str());
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
@@ -237,21 +303,39 @@ int main()
 				break;
 			}
 			case db_ipc::command::OBTAIN_BETWEEN:
+			{
+				std::vector<std::pair<tkey, tvalue>> range;
+				try
+				{
+					range = db->obtain_between(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, msg.right_boundary_login, true, true);
+				}
+				catch (db_storage::invalid_struct_name_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
+				{
+					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
+				}
+				
+				// TODO
+				msg.hashed_password = range[0].second.hashed_password;
+				strcpy(msg.name, range[0].second.name.c_str());
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
+			}
 			
 			default:
 				break;
 		}
     }
     
-    // for (auto &record : streams)
-    // {
-    //     std::ofstream &stream = record.second;
-    //     stream.flush();
-    //     stream.close();
-    // }
-    
     msgctl(mq_descriptor, IPC_RMID, nullptr);
+	db->consolidate();
     
     std::cout << "Server shutdowned" << std::endl;
     
@@ -259,27 +343,6 @@ int main()
 }
 
 
-
-std::string decode_severity(int severity_code)
-{
-    switch (severity_code)
-    {
-    case 0:
-        return "TRACE";
-    case 1:
-        return "DEBUG";
-    case 2:
-        return "INFORMATION";
-    case 3:
-        return "WARNING";
-    case 4:
-        return "ERROR";
-    case 5:
-        return "CRITICAL";
-    default:
-        return "UNKNOWN";
-    }
-}
 
 void terminal_reader()
 {
@@ -300,36 +363,3 @@ void terminal_reader()
         }
     }
 }
-
-
-
-
-// int main()
-// {
-// 	tkey key1 = "aboba62";
-// 	tvalue value1(0, "Aboba abobich");
-	
-// 	tkey key2 = "aboba12";
-// 	tvalue value2(0, "Aboba boo");
-	
-// 	tkey key3 = "aboba82";
-// 	tvalue value3(0, "Aboba bee");
-	
-	
-// 	auto vec = db_storage::get_instance()
-// 				->set_mode(db_storage::mode::in_memory_cache)
-// 				->add_pool("pool", db_storage::search_tree_variant::b)
-// 				->add_schema("pool", "schema", db_storage::search_tree_variant::b)
-// 				->add_collection("pool", "schema", "collection", db_storage::search_tree_variant::b, db_storage::allocator_variant::boundary_tags)
-// 				->add("pool", "schema", "collection", key1, value1)
-// 				->add("pool", "schema", "collection", key2, value2)
-// 				->add("pool", "schema", "collection", key3, value3)
-// 				->obtain_between("pool", "schema", "collection", "", "zzzzzzzzzzzzzzzzzz", 1, 1);
-	
-// 	for (auto v : vec)
-// 	{
-// 		std::cout << v.key << ' ' << v.value.hashed_password << ' ' << v.value.name << std::endl;
-// 	}
-	
-// 	return 0;
-// }

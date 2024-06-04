@@ -6,7 +6,24 @@
 
 namespace db_ipc
 {
-
+	
+	enum class search_tree_variant
+	{
+		B,
+		B_PLUS,
+		B_STAR,
+		B_STAR_PLUS,
+	};
+	
+	enum class allocator_variant
+	{
+		GLOBAL_HEAP,
+		SORTED_LIST,
+		BUDDY_SYSTEM,
+		BOUNDARY_TAGS,
+		RED_BLACK_TREE
+	};
+	
 	enum class command
 	{
 		// manage commands
@@ -26,7 +43,7 @@ namespace db_ipc
 		ADD_COLLECTION,
 		DISPOSE_POOL,
 		DISPOSE_SCHEMA,
-		DISPOSE_STORAGE,
+		DISPOSE_COLLECTION,
 		
 		ADD,
 		UPDATE,
@@ -83,11 +100,12 @@ namespace db_ipc
 		
 		// data
 		
-		char tree_variant;
-		char allocator_variant;
+		search_tree_variant tree_variant;
+		allocator_variant alloc_variant;
 		size_t t_for_b_trees;
 		
 		char login[STORAGE_MSG_KEY_SIZE];
+		char right_boundary_login[STORAGE_MSG_KEY_SIZE];
 		int64_t hashed_password;
 		char name[STORAGE_MSG_NAME_SIZE];
 	};

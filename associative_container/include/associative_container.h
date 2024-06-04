@@ -62,6 +62,16 @@ public:
 
 public:
     
+    // TODO
+    struct associative_container_iterator
+    {
+    
+    public:
+    
+    };
+
+public:
+    
     virtual ~associative_container() noexcept = default;
 
 public:

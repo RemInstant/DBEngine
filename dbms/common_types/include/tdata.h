@@ -26,6 +26,8 @@ public:
 
 public:
 	
+	tvalue();
+	
 	tvalue(
 		uint64_t hashed_password,
 		std::string const &name);
@@ -81,14 +83,18 @@ class file_tdata final
 
 private:
 
-	long file_pos;
+	long _file_pos;
 
 public:
 
+	file_tdata(
+		long file_pos = -1);
+	
 	void serialize(
 		std::string const &path,
 		tkey const &key,
-		tvalue const &value);
+		tvalue const &value,
+		bool update_flag = false);
 	
 	tvalue deserialize(
 		std::string const &path) const;
