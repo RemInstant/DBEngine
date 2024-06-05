@@ -5,6 +5,7 @@
 #include <search_tree.h>
 #include <b_tree.h>
 #include <allocator.h>
+#include <allocator_with_fit_mode.h>
 #include <tdata.h>
 
 class db_storage final
@@ -38,7 +39,29 @@ public:
 
 public:
 
-#pragma region exceptions
+#pragma region exceptionsd
+
+	class setup_failure final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        setup_failure(
+			std::string const &error_msg);
+	
+	};
+	
+	class load_failure final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        load_failure(
+			std::string const &error_msg);
+	
+	};
 
 	class invalid_struct_name_exception final:
 		public std::logic_error
@@ -87,6 +110,16 @@ public:
 	public:
 	
         insertion_of_existent_struct_attempt_exception();
+	
+	};
+	
+	class insertion_of_struct_failure final:
+		public std::logic_error
+	{
+		
+	public:
+	
+        insertion_of_struct_failure();
 	
 	};
 	
@@ -155,12 +188,23 @@ private:
 		
 		allocator *_allocator;
 		allocator_variant _allocator_variant;
+		allocator_with_fit_mode::fit_mode _fit_mode;
+		
+		// size_t records_cnt;
+		// size_t disposed_cnt;
+		
+		// disposed_cnt >= 0.35 * records_cnt
+		
+		// string_pool.clean();
+		// consolidate();
+		// disposed_cnt = 0;
 	
 	public:
 	
 		explicit collection(
 			search_tree_variant tree_variant,
 			allocator_variant allocator_variant,
+			allocator_with_fit_mode::fit_mode fit_mode,
 			size_t t_for_b_trees = 8);
 		
 	public:
@@ -279,6 +323,7 @@ private:
 			std::string const &collection_name,
 			search_tree_variant tree_variant,
 			allocator_variant allocator_variant,
+			allocator_with_fit_mode::fit_mode fit_mode,
 			size_t t_for_b_trees = 8);
 		
 		void dispose(
@@ -416,6 +461,7 @@ public:
 		std::string const &collection_name,
 		search_tree_variant tree_variant,
 		allocator_variant allocator_variant,
+		allocator_with_fit_mode::fit_mode fit_mode,
 		size_t t_for_b_trees = 8);
 	
 	db_storage *dispose_collection(

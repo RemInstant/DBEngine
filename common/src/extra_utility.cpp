@@ -30,7 +30,7 @@ std::string extra_utility::make_path(
 		
 	for (auto elem : list)
 	{
-		if (!path.empty())
+		if (path[0])
 		{
 			path.push_back('/');
 		}

@@ -24,6 +24,13 @@ namespace db_ipc
 		RED_BLACK_TREE
 	};
 	
+	enum class allocator_fit_mode
+    {
+		FIRST_FIT,
+		THE_BEST_FIT,
+		THE_WORST_FIT,
+    };
+	
 	enum class command
 	{
 		// manage commands
@@ -70,10 +77,12 @@ namespace db_ipc
 		
 		ATTEMPT_TO_CHANGE_SETUP,
 		
+		STRUCT_DOES_NOT_EXIST,
 		POOL_DOES_NOT_EXIST,
 		SCHEMA_DOES_NOT_EXIST,
 		COLLECTION_DOES_NOT_EXIST,
 		
+		ATTEMPT_TO_ADD_STRUCT_DUBLICATE,
 		ATTEMPT_TO_ADD_POOL_DUBLICATE,
 		ATTEMPT_TO_ADD_SCHEMA_DUBLICATE,
 		ATTEMPT_TO_ADD_COLLECTION_DUBLICATE,
@@ -83,7 +92,9 @@ namespace db_ipc
 		ATTEMPT_TO_DISPOSE_NONEXISTENT_KEY,
 		ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY,
 		
+		FAILED_TO_SETUP_STORAGE_SERVER,
 		FAILED_TO_ADD_STRUCT,
+		FAILED_TO_DISPOSE_STRUCT,
 		FAILED_TO_PERFORM_DATA_COMMAND,
 		FAILED_TO_INSERT_KEY,
 		FAILED_TO_UPDATE_KEY,
@@ -115,6 +126,7 @@ namespace db_ipc
 		
 		search_tree_variant tree_variant;
 		allocator_variant alloc_variant;
+		allocator_fit_mode alloc_fit_mode;
 		size_t t_for_b_trees;
 		
 		char login[STORAGE_MSG_KEY_SIZE];

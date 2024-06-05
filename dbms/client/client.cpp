@@ -80,28 +80,54 @@ db_ipc::allocator_variant read_allocator(
 		throw std::runtime_error("Expected allocator type");
 	}
 	
-    if (allocator == "allocator_global_heap")
+    if (allocator == "global_heap")
     {
         return db_ipc::allocator_variant::GLOBAL_HEAP;
     }
-    else if (allocator == "allocator_boundary_tags")
+    else if (allocator == "boundary_tags")
     {
         return db_ipc::allocator_variant::BOUNDARY_TAGS;
     }
-    else if (allocator == "allocator_buddies_system")
+    else if (allocator == "buddies_system")
     {
         return db_ipc::allocator_variant::BUDDY_SYSTEM;
     }
-    else if (allocator == "allocator_sorted_list")
+    else if (allocator == "sorted_list")
     {
         return db_ipc::allocator_variant::SORTED_LIST;
     }
-    else if (allocator == "allocator_red_black_tree")
+    else if (allocator == "red_black_tree")
     {
         return db_ipc::allocator_variant::RED_BLACK_TREE;
     }
 	
 	throw std::runtime_error("Invalid allocator type");
+}
+
+db_ipc::allocator_fit_mode read_allocator_fit_mode(
+	std::istringstream &stream)
+{
+	std::string fit_mode;
+	
+	if (!(stream >> fit_mode))
+	{
+		throw std::runtime_error("Expected allocator fit mode");
+	}
+	
+    if (fit_mode == "first")
+    {
+        return db_ipc::allocator_fit_mode::FIRST_FIT;
+    }
+    else if (fit_mode == "best")
+    {
+        return db_ipc::allocator_fit_mode::THE_BEST_FIT;
+    }
+    else if (fit_mode == "worst")
+    {
+        return db_ipc::allocator_fit_mode::THE_WORST_FIT;
+    }
+	
+	throw std::runtime_error("Invalid allocator fit mode");
 }
 
 std::string read_key(
@@ -327,6 +353,7 @@ void handle_add_pool_command(
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	
+	msg.tree_variant = db_ipc::search_tree_variant::B;
 	msg.t_for_b_trees = t;
 	
 	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
@@ -355,6 +382,7 @@ void handle_add_schema_command(
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
 	
+	msg.tree_variant = db_ipc::search_tree_variant::B;
 	msg.t_for_b_trees = t;
 	
 	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
@@ -373,6 +401,7 @@ void handle_add_collection_command(
 	std::string collection_name = read_struct_name(args);
 	size_t t = read_parameter_t_for_b_trees(args);
 	db_ipc::allocator_variant alloc_variant = read_allocator(args);
+	db_ipc::allocator_fit_mode alloc_fit_mode = read_allocator_fit_mode(args);
 	validate_eof(args);
 	
 	db_ipc::strg_msg_t msg;
@@ -386,8 +415,10 @@ void handle_add_collection_command(
 	strcpy(msg.schema_name, schema_name.c_str());
 	strcpy(msg.collection_name, collection_name.c_str());
 	
+	msg.tree_variant = db_ipc::search_tree_variant::B;
 	msg.t_for_b_trees = t;
 	msg.alloc_variant = alloc_variant;
+	msg.alloc_fit_mode = alloc_fit_mode;
 	
 	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
@@ -536,6 +567,8 @@ void handle_server_answer(
 			throw std::runtime_error("Too big struct name");
 		case db_ipc::command_status::INVALID_PATH:
 			throw std::runtime_error("Invalid structs path");
+		case db_ipc::command_status::STRUCT_DOES_NOT_EXIST:
+			throw std::runtime_error("Enteted struct does not exist");
 		case db_ipc::command_status::POOL_DOES_NOT_EXIST:
 			throw std::runtime_error("Enteted pool does not exist");
 		case db_ipc::command_status::SCHEMA_DOES_NOT_EXIST:
@@ -556,7 +589,6 @@ void handle_server_answer(
 			throw std::runtime_error("Entered key does not exist");
 		case db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY:
 			throw std::runtime_error("Entered key does not exist");
-			
 		case db_ipc::command_status::FAILED_TO_ADD_STRUCT:
 			switch (msg.cmd)
 			{
@@ -568,6 +600,18 @@ void handle_server_answer(
 					throw std::runtime_error("Failed to add collection");
 				default:
 					throw std::runtime_error("Failed to add struct");
+			}
+		case db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT:
+			switch (msg.cmd)
+			{
+				case db_ipc::command::ADD_POOL:
+					throw std::runtime_error("Failed to dispose pool");
+				case db_ipc::command::ADD_SCHEMA:
+					throw std::runtime_error("Failed to dispose schema");
+				case db_ipc::command::ADD_COLLECTION:
+					throw std::runtime_error("Failed to dispose collection");
+				default:
+					throw std::runtime_error("Failed to dispose struct");
 			}
 		case db_ipc::command_status::FAILED_TO_PERFORM_DATA_COMMAND:
 			switch (msg.cmd)
@@ -620,13 +664,13 @@ void handle_server_answer(
 			std::cout << "Added collection '" << msg.pool_name << '/' << msg.schema_name << '/' << msg.collection_name << "'" << std::endl;
 			break;
 		case db_ipc::command::DISPOSE_POOL:
-			std::cout << "Disposed pool '" << msg.pool_name << '/' << msg.schema_name << '/' << msg.collection_name << "'" << std::endl;
+			std::cout << "Disposed schema '" << msg.pool_name << "'" << std::endl;
 			break;
 		case db_ipc::command::DISPOSE_SCHEMA:
 			std::cout << "Disposed schema '" << msg.pool_name << '/' << msg.schema_name << "'" << std::endl;
 			break;
 		case db_ipc::command::DISPOSE_COLLECTION:
-			std::cout << "Disposed schema '" << msg.pool_name << "'" << std::endl;
+			std::cout << "Disposed pool '" << msg.pool_name << '/' << msg.schema_name << '/' << msg.collection_name << "'" << std::endl;
 			break;
 		default:
 			throw std::runtime_error("Invalid server answer");
@@ -649,7 +693,7 @@ void run_session(
     std::string key;
     tvalue value;
 
-    while(getline(stream, buf))
+    while(std::getline(stream, buf))
     {
         std::istringstream line(buf);
         line >> cmd;

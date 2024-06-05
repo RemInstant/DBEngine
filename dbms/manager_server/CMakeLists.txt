@@ -12,6 +12,20 @@ target_link_libraries(
         os_cw_dbms_mngr_srvr
         PUBLIC
         os_cw_dbms_cmmn_types)
+
+target_link_libraries(
+        os_cw_dbms_mngr_srvr
+        PUBLIC
+        os_cw_assctv_cntnr)
+target_link_libraries(
+        os_cw_dbms_mngr_srvr
+        PUBLIC
+        os_cw_assctv_cntnr_srch_tr)
+target_link_libraries(
+        os_cw_dbms_mngr_srvr
+        PUBLIC
+        os_cw_assctv_cntnr_srch_tr_indxng_tr_b_tr)
+
 set_target_properties(
         os_cw_dbms_mngr_srvr PROPERTIES
         LANGUAGES CXX

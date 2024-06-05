@@ -4,12 +4,23 @@
 #include <cstring>
 #include <climits>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 
 #include "../include/db_storage.h"
 
 
 #pragma region exceptions implementation
+
+db_storage::setup_failure::setup_failure(
+	std::string const &error_msg):
+		logic_error(error_msg)
+{ }
+
+db_storage::load_failure::load_failure(
+	std::string const &error_msg):
+		logic_error(error_msg)
+{ }
 
 db_storage::invalid_struct_name_exception::invalid_struct_name_exception():
 		logic_error("got invalid db structural element name")
@@ -29,6 +40,10 @@ db_storage::too_big_path_exception::too_big_path_exception():
 
 db_storage::insertion_of_existent_struct_attempt_exception::insertion_of_existent_struct_attempt_exception():
 	logic_error("attempt to add existent struct to database")
+{ }
+
+db_storage::insertion_of_struct_failure::insertion_of_struct_failure():
+	logic_error("failed to add struct")
 { }
 
 db_storage::disposal_of_nonexistent_struct_attempt_exception::disposal_of_nonexistent_struct_attempt_exception():
@@ -58,9 +73,11 @@ db_storage::disposal_of_nonexistent_key_attempt_exception::disposal_of_nonexiste
 db_storage::collection::collection(
 	search_tree_variant tree_variant,
 	db_storage::allocator_variant allocator_variant,
+	allocator_with_fit_mode::fit_mode fit_mode,
 	size_t t_for_b_trees):
 		_tree_variant(tree_variant),
-		_allocator_variant(allocator_variant)
+		_allocator_variant(allocator_variant),
+		_fit_mode(fit_mode)
 {
 	switch (tree_variant)
 	{
@@ -702,11 +719,12 @@ void db_storage::schema::add(
 	std::string const &collection_name,
 	search_tree_variant tree_variant,
 	db_storage::allocator_variant allocator_variant,
+	allocator_with_fit_mode::fit_mode fit_mode,
 	size_t t_for_b_trees)
 {
 	try
 	{
-		_collections->insert(collection_name, collection(tree_variant, allocator_variant, t_for_b_trees));
+		_collections->insert(collection_name, collection(tree_variant, allocator_variant, fit_mode, t_for_b_trees));
 	}
 	catch (search_tree<std::string, collection>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
@@ -1069,6 +1087,11 @@ db_storage *db_storage::setup(
 	_id = id;
 	_mode = mode;
 	
+	if (_mode == mode::file_system)
+	{
+		mkdir("pools", 0777);
+	}
+	
 	return this;
 }
 
@@ -1089,9 +1112,25 @@ db_storage *db_storage::load_db(
 			continue;
 		}
 		
-		size_t pool_elems_cnt = 0;
 		std::string pool_name = pool_entry.path().filename();
-		db->add_pool(pool_name, search_tree_variant::b, 8); // TODO SAVE CONFIGURATION
+		std::string pool_cfg_path = extra_utility::make_path({path, pool_name, "cfg"});
+		
+		if (access(pool_cfg_path.c_str(), F_OK) == -1)
+		{
+			continue;
+		}
+		
+		int b_tree_variant, t_for_b_trees;
+		
+		std::ifstream stream(pool_cfg_path);
+		stream >> b_tree_variant >> t_for_b_trees;
+		
+		if (stream.fail())
+		{
+			throw db_storage::load_failure("invalid configs");
+		}
+		
+		add_pool(pool_name, static_cast<search_tree_variant>(b_tree_variant), t_for_b_trees);
 		
 		for (auto const &schema_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name})))
 		{
@@ -1100,10 +1139,25 @@ db_storage *db_storage::load_db(
 				continue;
 			}
 			
-			size_t schema_elems_cnt = 0;
 			std::string schema_name = schema_entry.path().filename();
-			db->add_schema(pool_name, schema_name, search_tree_variant::b, 8); // TODO SAVE CONFIGURATION
-			++pool_elems_cnt;
+			std::string schema_cfg_path = extra_utility::make_path({path, pool_name, schema_name, "cfg"});
+			
+			if (access(schema_cfg_path.c_str(), F_OK) == -1)
+			{
+				continue;
+			}
+			
+			int b_tree_variant, t_for_b_trees;
+			
+			std::ifstream stream(schema_cfg_path);
+			stream >> b_tree_variant >> t_for_b_trees;
+			
+			if (stream.fail())
+			{
+				throw db_storage::load_failure("invalid configs");
+			}
+		
+			add_schema(pool_name, schema_name, static_cast<search_tree_variant>(b_tree_variant), t_for_b_trees);
 			
 			for (auto const &collection_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name, schema_name})))
 			{
@@ -1112,10 +1166,29 @@ db_storage *db_storage::load_db(
 					continue;
 				}
 				
-				size_t collection_elems_cnt = 0;
 				std::string collection_name = collection_entry.path().filename();
-				db->add_collection(pool_name, schema_name, collection_name, search_tree_variant::b, allocator_variant::boundary_tags, 8); // TODO SAVE CONFIGURATION
-				++schema_elems_cnt;
+				std::string collection_cfg_path = extra_utility::make_path({path, pool_name, schema_name, collection_name, "cfg"});
+			
+				if (access(collection_cfg_path.c_str(), F_OK) == -1)
+				{
+					continue;
+				}
+				
+				int b_tree_variant, alloc_variant, alloc_fit_mode, t_for_b_trees;
+				
+				std::ifstream stream(collection_cfg_path);
+				stream >> b_tree_variant >> alloc_variant >> alloc_fit_mode >> t_for_b_trees;
+				
+				if (stream.fail())
+				{
+					throw db_storage::load_failure("invalid configs");
+				}
+				
+				add_collection(pool_name, schema_name, collection_name,
+						static_cast<search_tree_variant>(b_tree_variant),
+						static_cast<allocator_variant>(alloc_variant),
+						static_cast<allocator_with_fit_mode::fit_mode>(alloc_fit_mode),
+						t_for_b_trees);
 				
 				for (auto const &table_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name, schema_name, collection_name})))
 				{
@@ -1127,25 +1200,9 @@ db_storage *db_storage::load_db(
 					if (table_entry.path().filename() == std::to_string(get_instance()->_id))
 					{
 						load_collection(path, pool_name, schema_name, collection_name);
-						++collection_elems_cnt;
 					}
 				}
-				
-				if (collection_elems_cnt == 0)
-				{
-					db->dispose_collection(pool_name, schema_name, collection_name);
-					--schema_elems_cnt;
-				}
 			}
-			if (schema_elems_cnt == 0)
-			{
-				db->dispose_schema(pool_name, schema_name);
-				--pool_elems_cnt;
-			}
-		}
-		if (pool_elems_cnt == 0)
-		{
-			db->dispose_pool(pool_name);
 		}
     }
 	
@@ -1157,8 +1214,48 @@ db_storage *db_storage::add_pool(
 	db_storage::search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
+	std::string path = extra_utility::make_path({"pools", pool_name});
+	
 	throw_if_uninutialized_at_perform()
+		.throw_if_invalid_file_name(pool_name)
+		.throw_if_path_is_too_long(path)
 		.add(pool_name, tree_variant, t_for_b_trees);
+	
+	if (get_instance()->_mode == mode::file_system)
+	{	
+		std::string cfg_path = extra_utility::make_path({path, "cfg"});
+		
+		if (access(path.c_str(), F_OK) == -1 || access(cfg_path.c_str(), F_OK) == -1)
+		{
+			try
+			{
+				mkdir(path.c_str(), 0777);
+				
+				std::ofstream stream(cfg_path);
+				if (!stream.is_open())
+				{
+					throw std::ios::failure("Failed to open the configuration file");
+				}
+				
+				stream << static_cast<int>(tree_variant) << std::endl;
+				stream << t_for_b_trees << std::endl;
+				stream.flush();
+				
+				if (stream.fail())
+				{
+					throw std::ios::failure("Failed to write the configuration file");
+				}
+			}
+			catch (std::ios::failure const &)
+			{
+				remove(cfg_path.c_str());
+				rmdir(path.c_str());
+				dispose(path);
+				
+				throw db_storage::insertion_of_struct_failure();
+			}
+		}
+	}
 	
 	return this;
 }
@@ -1168,6 +1265,14 @@ db_storage *db_storage::dispose_pool(
 {
 	throw_if_uninutialized_at_perform()
 		.dispose(pool_name);
+	
+	std::string path = extra_utility::make_path({"pools", pool_name});
+	// std::string cfg_path = extra_utility::make_path({path, "cfg"});
+	
+	std::filesystem::remove_all(path);
+	
+	// remove(cfg_path.c_str());
+	// rmdir(path.c_str());
 	
 	return this;
 }
@@ -1179,14 +1284,51 @@ db_storage *db_storage::add_schema(
 	size_t t_for_b_trees)
 {
 	std::string old_path = extra_utility::make_path({"pools", pool_name});
-	std::string new_path = extra_utility::make_path({"pools", pool_name, schema_name});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name});
 	
-	throw_if_uninutialized_at_perform()
-		.throw_if_invalid_path(old_path)
-		.throw_if_invalid_file_name(schema_name)
-		.throw_if_path_is_too_long(new_path)
-		.obtain(pool_name)
-		.add(schema_name, tree_variant, t_for_b_trees);
+	pool &pool = throw_if_uninutialized_at_perform()
+					.throw_if_invalid_path(old_path)
+					.throw_if_invalid_file_name(schema_name)
+					.throw_if_path_is_too_long(path)
+					.obtain(pool_name);
+	
+	pool.add(schema_name, tree_variant, t_for_b_trees);
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		std::string cfg_path = extra_utility::make_path({path, "cfg"});
+		
+		if (access(path.c_str(), F_OK) == -1 || access(cfg_path.c_str(), F_OK) == -1)
+		{
+			try
+			{
+				mkdir(path.c_str(), 0777);
+				
+				std::ofstream stream(cfg_path);
+				if (!stream.is_open())
+				{
+					throw std::ios::failure("Failed to create the configuration file");
+				}
+				
+				stream << static_cast<int>(tree_variant) << std::endl;
+				stream << t_for_b_trees << std::endl;
+				stream.flush();
+				
+				if (stream.fail())
+				{
+					throw std::ios::failure("Failed to write the configuration file");
+				}
+			}
+			catch (std::ios::failure const &)
+			{
+				remove(cfg_path.c_str());
+				rmdir(path.c_str());
+				dispose(path);
+				
+				throw db_storage::insertion_of_struct_failure();
+			}
+		}
+	}
 	
 	return this;
 }
@@ -1199,6 +1341,14 @@ db_storage *db_storage::dispose_schema(
 		.obtain(pool_name)
 		.dispose(schema_name);
 	
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name});
+	// std::string cfg_path = extra_utility::make_path({path, "cfg"});
+	
+	std::filesystem::remove_all(path);
+	
+	// remove(cfg_path.c_str());
+	// rmdir(path.c_str());
+	
 	return this;
 }
 
@@ -1208,18 +1358,69 @@ db_storage *db_storage::add_collection(
 	std::string const &collection_name,
 	db_storage::search_tree_variant tree_variant,
 	db_storage::allocator_variant allocator_variant,
+	allocator_with_fit_mode::fit_mode fit_mode,
 	size_t t_for_b_trees)
 {
 	std::string old_path = extra_utility::make_path({"pools", pool_name, schema_name});
-	std::string new_path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name});
 	
-	throw_if_uninutialized_at_perform()
-		.throw_if_invalid_path(old_path)
-		.throw_if_invalid_file_name(collection_name)
-		.throw_if_path_is_too_long(new_path)
-		.obtain(pool_name)
-		.obtain(schema_name)
-		.add(collection_name, tree_variant, allocator_variant, t_for_b_trees);
+	schema &schema = throw_if_uninutialized_at_perform()
+						.throw_if_invalid_path(old_path)
+						.throw_if_invalid_file_name(collection_name)
+						.throw_if_path_is_too_long(path)
+						.obtain(pool_name)
+						.obtain(schema_name);
+	
+	schema.add(collection_name, tree_variant, allocator_variant, fit_mode, t_for_b_trees);
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		std::string cfg_path = extra_utility::make_path({path, "cfg"});
+		std::string strg_path = extra_utility::make_path({path, std::to_string(_id)});
+		
+		if (access(path.c_str(), F_OK) == -1 || access(cfg_path.c_str(), F_OK) == -1 ||
+				access(strg_path.c_str(), F_OK) == -1)
+		{
+			try
+			{
+				mkdir(path.c_str(), 0777);
+				
+				std::ofstream strg_stream(strg_path.c_str());
+				strg_stream.close();
+				
+				if (access(strg_path.c_str(), F_OK) == -1)
+				{
+					throw std::ios::failure("Failed to create the storage file");
+				}
+				
+				std::ofstream stream(cfg_path);
+				if (!stream.is_open())
+				{
+					throw std::ios::failure("Failed to open the configuration file");
+				}
+				
+				stream << static_cast<int>(tree_variant) << std::endl;
+				stream << static_cast<int>(allocator_variant) << std::endl;
+				stream << static_cast<int>(fit_mode) << std::endl;
+				stream << t_for_b_trees << std::endl;
+				stream.flush();
+				
+				if (stream.fail())
+				{
+					throw std::ios::failure("Failed to write the configuration file");
+				}
+			}
+			catch (std::ios::failure const &)
+			{
+				remove(strg_path.c_str());
+				remove(cfg_path.c_str());
+				rmdir(path.c_str());
+				schema.dispose(collection_name);
+				
+				throw db_storage::insertion_of_struct_failure();
+			}
+		}
+	}
 	
 	return this;
 }
@@ -1233,6 +1434,18 @@ db_storage *db_storage::dispose_collection(
 		.obtain(pool_name)
 		.obtain(schema_name)
 		.dispose(collection_name);
+	
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name});
+	// std::string tmp_path = extra_utility::make_path({path, "tmp"});
+	// std::string strg_path = extra_utility::make_path({path, std::to_string(_id)});
+	// std::string cfg_path = extra_utility::make_path({path, "cfg"});
+	
+	std::filesystem::remove_all(path);
+	
+	// remove(tmp_path.c_str());
+	// remove(strg_path.c_str());
+	// remove(cfg_path.c_str());
+	// rmdir(path.c_str());
 	
 	return this;
 }
@@ -1393,7 +1606,7 @@ void db_storage::add(
 {
 	try
 	{
-		_pools.insert(pool_name, pool(tree_variant, t_for_b_trees));
+		_pools.insert(pool_name, pool(tree_variant, t_for_b_trees));		
 	}
 	catch (search_tree<std::string, pool>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
@@ -1497,7 +1710,7 @@ db_storage &db_storage::throw_if_initialized_at_setup()
 		return *this;
 	}
 	
-	throw std::logic_error("attempt to change previously set up mode");
+	throw db_storage::setup_failure("attempt to change previously set up mode");
 }
 
 db_storage &db_storage::throw_if_invalid_setup(
@@ -1509,7 +1722,7 @@ db_storage &db_storage::throw_if_invalid_setup(
 		return *this;
 	}
 	
-	throw std::logic_error("invalid setup data"); // TODO CHANGE
+	throw db_storage::setup_failure("invalid setup data");
 }
 
 db_storage &db_storage::throw_if_uninutialized_at_perform()
@@ -1519,7 +1732,7 @@ db_storage &db_storage::throw_if_uninutialized_at_perform()
 		return *this;
 	}
 	
-	throw std::logic_error("attempt to perform an operation while mode not initialized");
+	throw std::logic_error("attempt to perform an operation while mode not initialized"); // TODO CHANGE?
 }
 
 db_storage &db_storage::throw_if_invalid_path(

@@ -14,6 +14,7 @@
 
 #include <extra_utility.h>
 #include <ipc_data.h>
+#include <b_tree.h>
 
 int run_flag = 1;
 int mq_descriptor = -1;
@@ -26,7 +27,7 @@ void run_terminal_reader(
 pid_t run_storage_server(
     size_t strg_server_id);
 
-void redistribute_keys()
+void redistribute_keys();
 
 
 void handle_add_server_command(
@@ -42,6 +43,11 @@ void handle_add_struct_command(
     db_ipc::strg_msg_t &msg,
     std::initializer_list<const char*> structs);
 
+void handle_struct_management_command(
+    std::map<int, pid_t> const &strg_servers,
+    std::vector<std::string> const &separators,
+    db_ipc::strg_msg_t &msg);
+
 void handle_data_command(
     std::map<int, pid_t> const &strg_servers,
     std::vector<std::string> const &separators,
@@ -49,7 +55,10 @@ void handle_data_command(
 
 int main()
 {
-    bool is_filesystem = false;
+    msgctl(msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666), IPC_RMID, nullptr);
+    
+    bool is_filesystem = true;
+    // std::set<std::pair<std::string, std::set<std::pair<std::string, std::set<std::string>>>>> structure;
     
     db_ipc::strg_msg_t msg;
     std::map<int, pid_t> strg_servers;
@@ -58,11 +67,11 @@ int main()
     std::thread cmd_thread(run_terminal_reader, &strg_servers);
     
     mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, IPC_CREAT | 0666);
-    if (mq_descriptor == -1)
-    {
-        std::cout << "Cannot create the queue. Shut down." << std::endl;
-        return 1;
-    }
+    // if (mq_descriptor == -1)
+    // {
+    //     std::cout << "Cannot create the queue. Shut down." << std::endl;
+    //     return 1;
+    // }
     
     ssize_t rcv = -1;
     do
@@ -88,7 +97,7 @@ int main()
             break;
         }
         
-        std::cout << "MNGR read from " << msg.pid << std::endl;
+        std::cout << "MNGR (" << getpid() << ") read from " << msg.pid << std::endl;
         
         msg.mtype = msg.pid;
         
@@ -96,7 +105,7 @@ int main()
         {
             case db_ipc::command::ADD_STORAGE_SERVER:
             {
-                std::lock_guard<std::mutex> guard(mtx);
+                //std::lock_guard<std::mutex> guard(mtx);
                 handle_add_server_command(is_filesystem, strg_servers, separators, msg);
                 break;
             }
@@ -113,6 +122,13 @@ int main()
             case db_ipc::command::ADD_COLLECTION:
             {
                 handle_add_struct_command(is_filesystem, strg_servers, separators, msg, {msg.pool_name, msg.schema_name, msg.collection_name});
+                break;
+            }
+            case db_ipc::command::DISPOSE_POOL:
+            case db_ipc::command::DISPOSE_SCHEMA:
+            case db_ipc::command::DISPOSE_COLLECTION:
+            {
+                handle_struct_management_command(strg_servers, separators, msg);
                 break;
             }
             case db_ipc::command::ADD:
@@ -211,13 +227,17 @@ void handle_add_server_command(
     {
         sleep(counter);
         rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR, MSG_NOERROR || IPC_NOWAIT);
-    } while (counter < 5 && rcv_cnt == -1);
+    } while (++counter < 5 && rcv_cnt == -1);
     
-    if (rcv_cnt == -1)
+    if (rcv_cnt == -1 || msg.status == db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER)
     {
+        kill(pid, SIGKILL);
         std::cout << "Failed to add storage server" << std::endl;
         return;
     }
+    
+    
+    
     
     if (id > 1)
     {
@@ -250,6 +270,8 @@ pid_t run_storage_server(
         return -1;
     }
     
+    sleep(1);
+    
     if (waitpid(pid, NULL, WNOHANG) == 0)
     {
         return pid;
@@ -258,6 +280,22 @@ pid_t run_storage_server(
     return -1;
 }
 
+
+void redistribute_keys(
+    //bool is_filesystem,
+    std::map<int, pid_t> const &strg_servers,
+    std::vector<std::string> &separators)
+{
+    db_ipc::strg_msg_t msg;
+    
+    for (size_t i = 0; i < strg_servers.size(); ++i)
+    {
+        
+    }
+    
+    
+    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+}
 
 void handle_add_struct_command(
     bool is_filesystem,
@@ -287,25 +325,57 @@ void handle_add_struct_command(
     else
     {
         const char *cpath = nullptr;
-        if (is_filesystem && msg.status == db_ipc::command_status::OK && 
-                access(cpath = extra_utility::make_path(structs).c_str(), F_OK) == -1)
-        {
-            mkdir(cpath, 0777);
+        // if (is_filesystem && msg.status == db_ipc::command_status::OK && 
+        //         access(cpath = extra_utility::make_path(structs).c_str(), F_OK) == -1)
+        // {
+        //     mkdir(cpath, 0777);
             
-            if (structs.size() == 3)
-            {
-                std::string path(cpath);
+        //     std::string path(cpath);
+            
+        //     if (structs.size() == 3)
+        //     {
                 
-                for (size_t i = 0; i < strg_servers.size(); ++i)
-                {
-                    std::string strg_path = extra_utility::make_path( {path, std::to_string(i + 1)} );
+        //         for (size_t i = 0; i < strg_servers.size(); ++i)
+        //         {
+        //             std::string strg_path = extra_utility::make_path( {path, std::to_string(i + 1)} );
                     
-                    int descriptor = open(strg_path.c_str(), O_CREAT);
-                    close(descriptor);
-                }
-            }
-        }
+        //             int descriptor = open(strg_path.c_str(), O_CREAT);
+        //             close(descriptor);
+        //         }
+        //     }
+        // }
         
+        msg.mtype = msg.pid;
+        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+    }
+}
+
+void handle_struct_management_command(
+    std::map<int, pid_t> const &strg_servers,
+    std::vector<std::string> const &separators,
+    db_ipc::strg_msg_t &msg)
+{
+    if (msg.status == db_ipc::command_status::CLIENT)
+    {
+        if (strg_servers.empty())
+        {
+            msg.mtype = msg.pid;
+            msg.status = db_ipc::command_status::STRUCT_DOES_NOT_EXIST;
+            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        }
+        else if (separators.empty())
+        {
+            msg.mtype = strg_servers.at(1);
+            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        }
+        else
+        {
+            // TODO;
+        }
+    }
+    else
+    {
+        const char *cpath = nullptr;
         msg.mtype = msg.pid;
         msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
     }

@@ -898,6 +898,9 @@ std::vector<typename associative_container<tkey, tvalue>::key_value_pair> b_tree
         ++iter;
     }
     
+    auto x = std::get<2>(*iter);
+    int y = comparer(x, upper_bound);
+    
     while(iter != end_iter && 
             (comparer(std::get<2>(*iter), upper_bound)) < (upper_bound_inclusive ? 1 : 0))
     {

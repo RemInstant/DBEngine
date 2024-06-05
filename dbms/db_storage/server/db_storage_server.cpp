@@ -19,7 +19,7 @@ void run_terminal_reader();
 #include "sys/stat.h"
 
 int main()
-{
+{	
 	pid_t pid = getpid();
 	
 	while (getpid() <= db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR)
@@ -107,8 +107,21 @@ int main()
 				}
 				else
 				{
-					db->setup(msg.extra_value, db_storage::mode::file_system);
+					try
+					{
+						db->setup(msg.extra_value, db_storage::mode::file_system)
+							->load_db("pools");
+					}
+					catch (db_storage::setup_failure const &)
+					{
+						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
+					}
+					catch (db_storage::invalid_path_exception const &)
+					{
+						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
+					}
 				}
+				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
@@ -133,6 +146,10 @@ int main()
 				{
 					db->add_pool(msg.pool_name, static_cast<db_storage::search_tree_variant>(msg.tree_variant), msg.t_for_b_trees);
 				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
@@ -144,6 +161,10 @@ int main()
 				catch (db_storage::insertion_of_existent_struct_attempt_exception const &)
 				{
 					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_POOL_DUBLICATE;
+				}
+				catch (db_storage::insertion_of_struct_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (std::bad_alloc const &)
 				{
@@ -159,6 +180,10 @@ int main()
 				{
 					db->add_schema(msg.pool_name, msg.schema_name,
 							static_cast<db_storage::search_tree_variant>(msg.tree_variant), msg.t_for_b_trees);
+				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
@@ -176,6 +201,10 @@ int main()
 				{
 					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_SCHEMA_DUBLICATE;
 				}
+				catch (db_storage::insertion_of_struct_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
 				catch (std::bad_alloc const &)
 				{
 					msg.status = db_ipc::command_status::BAD_ALLOC;
@@ -191,7 +220,12 @@ int main()
 					db->add_collection(msg.pool_name, msg.schema_name, msg.collection_name,
 							static_cast<db_storage::search_tree_variant>(msg.tree_variant),
 							static_cast<db_storage::allocator_variant>(msg.alloc_variant),
+							static_cast<allocator_with_fit_mode::fit_mode>(msg.alloc_fit_mode),
 							msg.t_for_b_trees);
+				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
@@ -209,6 +243,10 @@ int main()
 				{
 					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_COLLECTION_DUBLICATE;
 				}
+				catch (db_storage::insertion_of_struct_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
 				catch (std::bad_alloc const &)
 				{
 					msg.status = db_ipc::command_status::BAD_ALLOC;
@@ -223,10 +261,21 @@ int main()
 				{
 					db->dispose_pool(msg.pool_name);
 				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT;
+				}
 				catch (db_storage::invalid_path_exception const &)
 				{
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
+				catch (db_storage::disposal_of_nonexistent_struct_attempt_exception)
+				{
+					msg.status = db_ipc::command_status::POOL_DOES_NOT_EXIST;
+				}
+				
+				msg.schema_name[0] = '\0';
+				msg.collection_name[0] = '\0';
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
@@ -237,10 +286,20 @@ int main()
 				{
 					db->dispose_schema(msg.pool_name, msg.schema_name);
 				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT;
+				}
 				catch (db_storage::invalid_path_exception const &)
 				{
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
+				catch (db_storage::disposal_of_nonexistent_struct_attempt_exception)
+				{
+					msg.status = db_ipc::command_status::SCHEMA_DOES_NOT_EXIST;
+				}
+				
+				msg.schema_name[0] = '\0';
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
@@ -251,9 +310,17 @@ int main()
 				{
 					db->dispose_collection(msg.pool_name, msg.schema_name, msg.collection_name);
 				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT;
+				}
 				catch (db_storage::invalid_path_exception const &)
 				{
 					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (db_storage::disposal_of_nonexistent_struct_attempt_exception)
+				{
+					msg.status = db_ipc::command_status::COLLECTION_DOES_NOT_EXIST;
 				}
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
@@ -264,6 +331,10 @@ int main()
 				try
 				{
 					db->add(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.hashed_password, msg.name));
+				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_INSERT_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
@@ -294,6 +365,10 @@ int main()
 				try
 				{
 					db->update(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.hashed_password, msg.name));
+				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_UPDATE_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
@@ -327,6 +402,10 @@ int main()
 					msg.hashed_password = value.hashed_password;
 					strcpy(msg.name, value.name.c_str());
 				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_KEY;
+				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
@@ -355,6 +434,10 @@ int main()
 					msg.hashed_password = value.hashed_password;
 					strcpy(msg.name, value.name.c_str());
 				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
@@ -381,6 +464,10 @@ int main()
 				try
 				{
 					range = db->obtain_between(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, msg.right_boundary_login, true, true);
+				}
+				catch (db_storage::setup_failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
