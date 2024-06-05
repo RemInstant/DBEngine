@@ -82,6 +82,69 @@ public:
     
     };
     
+    class infix_reverse_iterator final
+    {
+        friend class b_tree<tkey, tvalue>;
+
+    public:
+
+        bool operator==(
+                infix_reverse_iterator const &other) const noexcept;
+
+        bool operator!=(
+                infix_reverse_iterator const &other) const noexcept;
+
+        infix_reverse_iterator &operator++();
+
+        infix_reverse_iterator operator++(
+                int not_used);
+
+        std::tuple<size_t, size_t, tkey const &, tvalue &> operator*() const;
+
+    private:
+
+        infix_reverse_iterator(
+                typename search_tree<tkey, tvalue>::common_node *node);
+
+    private:
+
+        std::stack<std::pair<typename search_tree<tkey, tvalue>::common_node*, int>> _state;
+
+    };
+
+    class infix_const_reverse_iterator final
+    {
+        friend class b_tree<tkey, tvalue>;
+
+    public:
+
+        bool operator==(
+                infix_const_reverse_iterator const &other) const noexcept;
+
+        bool operator!=(
+                infix_const_reverse_iterator const &other) const noexcept;
+
+        infix_const_reverse_iterator &operator++();
+
+        infix_const_reverse_iterator operator++(
+                int not_used);
+
+        std::tuple<size_t, size_t, tkey const &, tvalue const &> operator*() const;
+
+    private:
+
+        infix_const_reverse_iterator(
+                typename search_tree<tkey, tvalue>::common_node *node);
+
+        infix_const_reverse_iterator(
+                std::stack<std::pair<typename search_tree<tkey, tvalue>::common_node*, int>> path);
+
+    private:
+
+        std::stack<std::pair<typename search_tree<tkey, tvalue>::common_node*, int>> _state;
+
+    };
+
     #pragma endregion iterators definition 
 
 public:
@@ -155,6 +218,14 @@ public:
     infix_const_iterator cbegin_infix() const noexcept;
 
     infix_const_iterator cend_infix() const noexcept;
+
+    infix_reverse_iterator rbegin_infix() const noexcept;
+
+    infix_reverse_iterator rend_infix() const noexcept;
+
+    infix_const_reverse_iterator crbegin_infix() const noexcept;
+
+    infix_const_reverse_iterator crend_infix() const noexcept;
     
     #pragma endregion iterators requesting
     
@@ -461,6 +532,286 @@ b_tree<tkey, tvalue>::infix_const_iterator::infix_const_iterator(
 { }
 
 #pragma endregion infix iterator implementation
+
+#pragma region infix reverse iterator implementation
+
+template<
+        typename tkey,
+        typename tvalue>
+bool b_tree<tkey, tvalue>::infix_reverse_iterator::operator==(
+        typename b_tree::infix_reverse_iterator const &other) const noexcept
+{
+    if (_state.empty() && other._state.empty())
+    {
+        return true;
+    }
+
+    if (_state.empty() ^ other._state.empty())
+    {
+        return false;
+    }
+
+    return _state.top() == other._state.top();
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+bool b_tree<tkey, tvalue>::infix_reverse_iterator::operator!=(
+        typename b_tree::infix_reverse_iterator const &other) const noexcept
+{
+    return !(*this == other);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_reverse_iterator &b_tree<tkey, tvalue>::infix_reverse_iterator::operator++()
+{
+    if (_state.empty())
+    {
+        return *this; // UB
+    }
+
+    auto *cur_node = _state.top().first;
+    auto cur_pos = _state.top().second;
+
+    if (cur_node->subtrees[cur_node->virtual_size] != nullptr)
+    {
+        std::cout << "pu\n";
+
+        cur_node = cur_node->subtrees[cur_pos];
+
+        while (cur_node->subtrees[cur_node->virtual_size] != nullptr)
+        {
+            _state.emplace(cur_node, cur_node->virtual_size + 1); //TODO cur_node->virtual_size
+            cur_node = cur_node->subtrees[cur_node->virtual_size];
+        }
+
+        _state.emplace(cur_node, cur_node->virtual_size - 1);
+
+        return *this;
+    }
+
+    if (cur_pos > 0)
+    {
+        std::cout << "pu pu\n";
+        --_state.top().second;
+        return *this;
+    }
+
+    if (cur_pos == 0)
+    {
+        _state.pop();
+
+        if (_state.empty())
+        {
+            return *this;
+        }
+
+        cur_node = _state.top().first;
+        cur_pos = _state.top().second;
+
+        std::cout << "pu pu pu\n";
+    }
+
+    //--_state.top().second;
+
+    return *this;
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_reverse_iterator b_tree<tkey, tvalue>::infix_reverse_iterator::operator++(
+        int not_used)
+{
+    infix_reverse_iterator iter = *this;
+    *this++;
+    return iter;
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+std::tuple<size_t, size_t, tkey const &, tvalue &> b_tree<tkey, tvalue>::infix_reverse_iterator::operator*() const
+{
+    if (_state.empty())
+    {
+        throw std::logic_error("attempt to dereference invalid or end iterator");
+    }
+
+    auto *kvp = _state.top().first->keys_and_values;
+    auto pos = _state.top().second;
+
+    return std::tuple<size_t, size_t, tkey const &, tvalue &>(_state.size() - 1, pos, kvp[pos].key, kvp[pos].value);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+b_tree<tkey, tvalue>::infix_reverse_iterator::infix_reverse_iterator(
+        typename search_tree<tkey, tvalue>::common_node *node)
+{
+    if (node == nullptr)
+    {
+        return;
+    }
+
+    auto *iter = node;
+
+    while (iter->subtrees[iter->virtual_size] != nullptr)
+    {
+        _state.emplace(iter, iter->virtual_size - 1);
+        iter = iter->subtrees[iter->virtual_size];
+    }
+
+    _state.emplace(iter, iter->virtual_size - 1);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+bool b_tree<tkey, tvalue>::infix_const_reverse_iterator::operator==(
+        b_tree::infix_const_reverse_iterator const &other) const noexcept
+{
+    if (_state.empty() && other._state.empty())
+    {
+        return true;
+    }
+
+    if (_state.empty() ^ other._state.empty())
+    {
+        return false;
+    }
+
+    return _state.top() == other._state.top();
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+bool b_tree<tkey, tvalue>::infix_const_reverse_iterator::operator!=(
+        b_tree::infix_const_reverse_iterator const &other) const noexcept
+{
+    return !(*this == other);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_const_reverse_iterator &b_tree<tkey, tvalue>::infix_const_reverse_iterator::operator++()
+{
+    if (_state.empty())
+    {
+        return *this; // UB
+    }
+
+    auto *cur_node = _state.top().first;
+    auto cur_pos = _state.top().second;
+
+    if (cur_node->subtrees[cur_node->virtual_size] != nullptr)
+    {
+        std::cout << "pu\n";
+
+        cur_node = cur_node->subtrees[cur_pos];
+
+        while (cur_node->subtrees[cur_node->virtual_size] != nullptr)
+        {
+            _state.emplace(cur_node, cur_node->virtual_size); //TODO cur_node->virtual_size
+            cur_node = cur_node->subtrees[cur_node->virtual_size];
+        }
+
+        _state.emplace(cur_node, cur_node->virtual_size - 1);
+
+        return *this;
+    }
+
+    if (cur_pos > 0)
+    {
+        std::cout << "pu pu\n";
+        --_state.top().second;
+        return *this;
+    }
+
+    if (cur_pos == 0)
+    {
+        _state.pop();
+
+        if (_state.empty())
+        {
+            return *this;
+        }
+
+        cur_node = _state.top().first;
+        cur_pos = _state.top().second;
+
+        std::cout << "pu pu pu\n";
+    }
+
+    //--_state.top().second;
+
+    return *this;
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_const_reverse_iterator b_tree<tkey, tvalue>::infix_const_reverse_iterator::operator++(
+        int not_used)
+{
+    infix_reverse_iterator iter = *this;
+    *this++;
+    return iter;
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+std::tuple<size_t, size_t, tkey const &, tvalue const &> b_tree<tkey, tvalue>::infix_const_reverse_iterator::operator*() const
+{
+    if (_state.empty())
+    {
+        throw std::logic_error("attempt to dereference invalid or end iterator");
+    }
+
+    auto *kvp = _state.top().first->keys_and_values;
+    auto pos = _state.top().second;
+
+    return std::tuple<size_t, size_t, tkey const &, tvalue const &>(_state.size() - 1, pos, kvp[pos].key, kvp[pos].value);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+b_tree<tkey, tvalue>::infix_const_reverse_iterator::infix_const_reverse_iterator(
+        typename search_tree<tkey, tvalue>::common_node *node)
+{
+    if (node == nullptr)
+    {
+        return;
+    }
+
+    auto *iter = node;
+
+    while (iter->subtrees[iter->virtual_size] != nullptr)
+    {
+        _state.emplace(iter, iter->virtual_size - 1);
+        iter = iter->subtrees[iter->virtual_size];
+    }
+
+    _state.emplace(iter, iter->virtual_size - 1);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+b_tree<tkey, tvalue>::infix_const_reverse_iterator::infix_const_reverse_iterator(
+        std::stack<std::pair<typename search_tree<tkey, tvalue>::common_node*, int>> path):
+        _state(path)
+{ }
+
+#pragma endregion infix reverse iterator implementation
 
 #pragma region BTree CRUD imlementation
 
@@ -1067,6 +1418,42 @@ typename b_tree<tkey, tvalue>::infix_const_iterator b_tree<tkey, tvalue>::cend_i
 }
 
 #pragma endregion iterators requesting implementation
+
+#pragma region reverse iterators requesting implementation
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_reverse_iterator b_tree<tkey, tvalue>::rbegin_infix() const noexcept
+{
+    return infix_reverse_iterator(reinterpret_cast<typename search_tree<tkey, tvalue>::common_node *>(this->_root));
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_reverse_iterator b_tree<tkey, tvalue>::rend_infix() const noexcept
+{
+    return infix_reverse_iterator(nullptr);
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_const_reverse_iterator b_tree<tkey, tvalue>::crbegin_infix() const noexcept
+{
+    return infix_const_reverse_iterator(reinterpret_cast<typename search_tree<tkey, tvalue>::common_node *>(this->_root));
+}
+
+template<
+        typename tkey,
+        typename tvalue>
+typename b_tree<tkey, tvalue>::infix_const_reverse_iterator b_tree<tkey, tvalue>::crend_infix() const noexcept
+{
+    return infix_const_reverse_iterator(nullptr);
+}
+
+#pragma endregion reverse iterators requesting implementation
 
 #pragma region BTree extra functions
 

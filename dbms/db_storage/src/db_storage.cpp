@@ -77,7 +77,9 @@ db_storage::collection::collection(
 	size_t t_for_b_trees):
 		_tree_variant(tree_variant),
 		_allocator_variant(allocator_variant),
-		_fit_mode(fit_mode)
+		_fit_mode(fit_mode),
+		_records_cnt(0),
+		_disposed_cnt(0)
 {
 	switch (tree_variant)
 	{
@@ -246,6 +248,8 @@ void db_storage::collection::insert(
 		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
 	}
+	
+	++_records_cnt;
 }
 
 void db_storage::collection::update(
@@ -297,6 +301,8 @@ void db_storage::collection::update(
 		throw db_storage::updating_of_nonexistent_key_attempt_exception();
 		// TODO
 	}
+	
+	++_records_cnt;
 }
 
 void db_storage::collection::update(
@@ -388,6 +394,9 @@ tvalue db_storage::collection::dispose(
 	allocator::destruct(data);
 	deallocate_with_guard(data);
 	
+	--_records_cnt;
+	++_disposed_cnt;
+	
 	return value;
 };
 
@@ -466,6 +475,52 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 	}
 	
 	return value_vec;
+}
+
+tvalue db_storage::collection::obtain_max(
+	std::string const &path)
+{
+	tdata *data = nullptr;
+	
+	switch (_tree_variant)
+	{
+		default:
+		{
+			b_tree<tkey, tdata *> *tree = dynamic_cast<b_tree<tkey, tdata *> *>(_data);
+			
+			auto iter = tree->rbegin_infix();
+			auto iter_end = tree->rend_infix();
+			
+			if (iter == iter_end)
+			{
+				throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
+			}
+			
+			data = std::get<3>(*tree->rbegin_infix());
+		}
+			
+	}
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		try
+		{
+			return dynamic_cast<file_tdata *>(data)->deserialize(path);
+		}
+		catch (std::ios::failure const &)
+		{
+			throw std::ios::failure("Failed to read data");
+		}
+	}
+	else
+	{
+		return dynamic_cast<ram_tdata *>(data)->value;
+	}
+};
+
+size_t db_storage::collection::get_records_cnt()
+{
+	return _records_cnt;
 }
 
 void db_storage::collection::load(
@@ -1069,13 +1124,17 @@ db_storage *db_storage::get_instance()
 db_storage::db_storage():
 	_id(0),
 	_mode(mode::uninitialized),
-	_pools(8),
-	_records_cnt(0)
+	_pools(8)
 { }
 
 #pragma endregion db storage instance getter and constructor implementation
 
 #pragma region db storage public operations implementation
+
+size_t db_storage::get_id()
+{
+	return _id;
+}
 
 db_storage *db_storage::setup(
 	size_t id,
@@ -1577,6 +1636,21 @@ std::vector<std::pair<tkey, tvalue>> db_storage::obtain_between(
 			.obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive, path);
 }
 
+tvalue db_storage::obtain_max(
+	std::string const &pool_name,
+	std::string const &schema_name,
+	std::string const &collection_name)
+{
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	
+	return throw_if_uninutialized_at_perform()
+			.throw_if_invalid_path(path)
+			.obtain(pool_name)
+			.obtain(schema_name)
+			.obtain(collection_name)
+			.obtain_max(path);
+}
+
 db_storage *db_storage::consolidate()
 {
 	auto iter = _pools.begin_infix();
@@ -1590,9 +1664,19 @@ db_storage *db_storage::consolidate()
 	return this;
 }
 
-size_t db_storage::get_records_cnt()
+size_t db_storage::get_collection_records_cnt(
+	std::string const &pool_name,
+	std::string const &schema_name,
+	std::string const &collection_name)
 {
-	return _records_cnt;
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	
+	return throw_if_uninutialized_at_perform()
+			.throw_if_invalid_path(path)
+			.obtain(pool_name)
+			.obtain(schema_name)
+			.obtain(collection_name)
+			.get_records_cnt();
 }
 
 #pragma endregion db storage public operations implementation

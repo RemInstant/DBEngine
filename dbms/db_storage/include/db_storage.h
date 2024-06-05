@@ -190,8 +190,8 @@ private:
 		allocator_variant _allocator_variant;
 		allocator_with_fit_mode::fit_mode _fit_mode;
 		
-		// size_t records_cnt;
-		// size_t disposed_cnt;
+		size_t _records_cnt;
+		size_t _disposed_cnt;
 		
 		// disposed_cnt >= 0.35 * records_cnt
 		
@@ -259,6 +259,11 @@ private:
 			bool lower_bound_inclusive,
 			bool upper_bound_inclusive,
 			std::string const &path);
+		
+		tvalue obtain_max(
+			std::string const &path);
+		
+		size_t get_records_cnt();
 	
 	public:
 	
@@ -414,7 +419,6 @@ private:
 	size_t _id;
 	mode _mode;
 	b_tree<std::string, pool> _pools;
-	size_t _records_cnt;
 
 public:
 
@@ -427,6 +431,10 @@ public:
 	
 	db_storage(
 		db_storage &&) = delete;
+
+public:
+
+	size_t get_id();
 
 public:
 
@@ -518,9 +526,17 @@ public:
         bool lower_bound_inclusive,
         bool upper_bound_inclusive);
 	
+	tvalue obtain_max(
+		std::string const &pool_name,
+		std::string const &schema_name,
+		std::string const &collection_name);
+	
 	db_storage *consolidate();
 
-	size_t get_records_cnt();
+	size_t get_collection_records_cnt(
+		std::string const &pool_name,
+		std::string const &schema_name,
+		std::string const &collection_name);
 
 private:
 

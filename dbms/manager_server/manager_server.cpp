@@ -136,6 +136,7 @@ int main()
             case db_ipc::command::DISPOSE:
             case db_ipc::command::OBTAIN:
             case db_ipc::command::OBTAIN_BETWEEN:
+            case db_ipc::command::OBTAIN_MAX:
             {
                 handle_data_command(strg_servers, separators, msg);
                 break;

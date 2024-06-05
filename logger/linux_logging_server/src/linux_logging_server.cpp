@@ -183,7 +183,7 @@ void terminal_reader()
         if (cmd == "shutdown")
         {
             msg.mtype = SHUTDOWN_PRIOR;
-            msgsnd(mq_descriptor, &msg, sizeof(msg_t), 0);\
+            msgsnd(mq_descriptor, &msg, sizeof(msg_t), 0);
             break;
         }
     }

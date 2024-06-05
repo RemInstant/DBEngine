@@ -60,6 +60,7 @@ namespace db_ipc
 		DISPOSE,
 		OBTAIN,
 		OBTAIN_BETWEEN,
+		OBTAIN_MAX,
 	};
 	
 	enum class command_status
@@ -137,7 +138,7 @@ namespace db_ipc
 	
 	
 
-	int constexpr STORAGE_SERVER_MQ_KEY = 100;
+	int constexpr STORAGE_SERVER_MQ_KEY = 50;
 	int constexpr STORAGE_SERVER_MSG_SIZE = sizeof(strg_msg_t) - sizeof(long);
 	
 	int constexpr STORAGE_SERVER_MAX_COMMON_PRIOR = 30;

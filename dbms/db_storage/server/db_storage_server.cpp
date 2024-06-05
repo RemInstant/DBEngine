@@ -10,6 +10,7 @@
 #include <tdata.h>
 #include <db_storage.h>
 #include <ipc_data.h>
+#include <server_logger.h>
 
 int run_flag = 1;
 int mq_descriptor = -1;
@@ -20,6 +21,22 @@ void run_terminal_reader();
 
 int main()
 {	
+	logger *logger = nullptr;
+	
+	try
+	{
+		logger = server_logger_builder()
+			.add_file_stream("123", logger::severity::information)
+			->add_console_stream(logger::severity::information)
+			->build();
+	}
+	catch (std::bad_alloc const &)
+	{
+		// todo something
+	}
+	
+	logger->information("I am so alive");
+	
 	pid_t pid = getpid();
 	
 	while (getpid() <= db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR)
@@ -136,7 +153,7 @@ int main()
 			}
 			case db_ipc::command::GET_RECORDS_CNT:
 			{
-				msg.extra_value = db->get_records_cnt();
+				msg.extra_value = db->get_collection_records_cnt(msg.pool_name, msg.schema_name, msg.collection_name);
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
@@ -250,6 +267,13 @@ int main()
 				catch (std::bad_alloc const &)
 				{
 					msg.status = db_ipc::command_status::BAD_ALLOC;
+				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+					logger->information("[STRG " + std::to_string(db->get_id()) + ":" +
+							std::to_string(getpid()) + "] " +
+							"Pool added");
 				}
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
@@ -492,6 +516,30 @@ int main()
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
+			case db_ipc::command::OBTAIN_MAX:
+            {
+                try
+                {
+					tvalue value = db->obtain_max(msg.pool_name, msg.schema_name, msg.collection_name);
+					msg.hashed_password = value.hashed_password;
+					strcpy(msg.name, value.name.c_str());
+                }
+                catch (db_storage::invalid_struct_name_exception const &)
+                {
+                    msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+                }
+                catch (db_storage::invalid_path_exception const &)
+                {
+                    msg.status = db_ipc::command_status::INVALID_PATH;
+                }
+                catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
+                {
+                    msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
+                }
+
+                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+                break;
+            }
 			
 			default:
 				break;
