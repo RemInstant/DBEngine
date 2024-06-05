@@ -22,3 +22,37 @@ template<> std::string extra_utility::make_string(double const &value)          
 template<> std::string extra_utility::make_string(long double const &value)         { return std::to_string(value); }
 template<> std::string extra_utility::make_string(std::string const &value)         { return value; }
 template<> std::string extra_utility::make_string(char * const &value)              { return std::string(value); }
+
+std::string extra_utility::make_path(
+	std::initializer_list<std::string> list)
+{
+	std::string path = "";
+		
+	for (auto elem : list)
+	{
+		if (!path.empty())
+		{
+			path.push_back('/');
+		}
+		path += elem;
+	}
+	
+	return path;
+}
+
+std::string extra_utility::make_path(
+	std::initializer_list<char const *> list)
+{
+	std::string path = "";
+		
+	for (auto elem : list)
+	{
+		if (!path.empty())
+		{
+			path.push_back('/');
+		}
+		path += elem;
+	}
+	
+	return path;
+}

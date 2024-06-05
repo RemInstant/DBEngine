@@ -1,6 +1,7 @@
 #ifndef OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE
 #define OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE
 
+#include <extra_utility.h>
 #include <search_tree.h>
 #include <b_tree.h>
 #include <allocator.h>
@@ -497,15 +498,9 @@ private:
 		std::string pool_name,
 		std::string schema_name,
 		std::string collection_name);
-		
-private:
-
-	static std::string make_path(
-		std::initializer_list<std::string> list);
-	
 
 private:
-	
+
 	db_storage &throw_if_initialized_at_setup();
 	
 	db_storage &throw_if_invalid_setup(

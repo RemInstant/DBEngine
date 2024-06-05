@@ -5,6 +5,7 @@
 #include <map>
 #include <thread>
 #include <sys/msg.h>
+#include <sys/wait.h>
 
 #include <tdata.h>
 #include <db_storage.h>
@@ -13,26 +14,45 @@
 int run_flag = 1;
 int mq_descriptor = -1;
 
-void terminal_reader();
+void run_terminal_reader();
 
 #include "sys/stat.h"
 
 int main()
 {
+	pid_t pid = getpid();
+	
+	while (getpid() <= db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR)
+	{
+		switch (pid = fork())
+		{
+			case -1:
+				std::cout << "An error occurred while starting client process" << std::endl;
+				return 1;
+			case 0:
+				break;
+			default:
+				waitpid(pid, NULL, 0);
+				return 0;
+		}
+	}
+	
+	pid = getpid();
+	
 	db_ipc::strg_msg_t msg;
 	db_storage *db = db_storage::get_instance();
 	bool is_setup = false;
 	
-    mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, IPC_CREAT | 0666);
+    mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
     {
         std::cout << "Cannot create the queue. Shut down." << std::endl;
         return 1;
     }
     
-	//db->set_mode(db_storage::mode::in_memory_cache);
-	db->setup(1, db_storage::mode::file_system);
-	db->load_db("pools");
+	// db->setup(1, db_storage::mode::in_memory_cache);
+	// db->setup(1, db_storage::mode::file_system);
+	// db->load_db("pools");
 	
 	// db->add_pool("p", db_storage::search_tree_variant::b, 4);
 	// db->add_schema("p", "s", db_storage::search_tree_variant::b, 4);
@@ -47,11 +67,11 @@ int main()
 	// db->dispose("p", "s", "c", "2");
 	// db->dispose("p", "s", "c", "4");
 	
-    std::thread cmd_thread(terminal_reader);
+    //std::thread cmd_thread(run_terminal_reader);
 	
     while (run_flag)
     {
-        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, -db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR, MSG_NOERROR);
+        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, pid, MSG_NOERROR);
         if (rcv_cnt == -1)
         {
             std::cout << "An error occured while receiving the message" << std::endl;
@@ -60,34 +80,35 @@ int main()
 		
 		std::cout << "read from " << msg.pid << std::endl;
 		
+		msg.mtype = 9;
 		msg.status = db_ipc::command_status::OK;
-		msg.mtype = msg.pid;
         
 		switch (msg.cmd)
 		{
 			case db_ipc::command::SET_IN_MEMORY_CACHE_MODE:
 			{
-				// if (is_setup)
-				// {
-				// 	msg.status = db_ipc::command_status::ATTEMPT_TO_CHANGE_SETUP;
-				// }
-				// else
-				// {
-				// 	db->set_mode(db_storage::mode::in_memory_cache);
-				// }
+				if (is_setup)
+				{
+					msg.status = db_ipc::command_status::ATTEMPT_TO_CHANGE_SETUP;
+				}
+				else
+				{
+					db->setup(msg.extra_value, db_storage::mode::in_memory_cache);
+				}
+				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
 			case db_ipc::command::SET_FILE_SYSTEM_MODE:
 			{
-				// if (is_setup)
-				// {
-				// 	msg.status = db_ipc::command_status::ATTEMPT_TO_CHANGE_SETUP;
-				// }
-				// else
-				// {
-				// 	db->set_mode(db_storage::mode::file_system);
-				// }
+				if (is_setup)
+				{
+					msg.status = db_ipc::command_status::ATTEMPT_TO_CHANGE_SETUP;
+				}
+				else
+				{
+					db->setup(msg.extra_value, db_storage::mode::file_system);
+				}
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
@@ -102,7 +123,7 @@ int main()
 			}
 			case db_ipc::command::GET_RECORDS_CNT:
 			{
-				msg.records_cnt = db->get_records_cnt();
+				msg.extra_value = db->get_records_cnt();
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
@@ -196,12 +217,48 @@ int main()
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
 			}
-			case db_ipc::command::DISPOSE_POOL: // Todo
+			case db_ipc::command::DISPOSE_POOL:
+			{
+				try
+				{
+					db->dispose_pool(msg.pool_name);
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
+			}
 			case db_ipc::command::DISPOSE_SCHEMA:
+			{
+				try
+				{
+					db->dispose_schema(msg.pool_name, msg.schema_name);
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
+			}
 			case db_ipc::command::DISPOSE_COLLECTION:
+			{
+				try
+				{
+					db->dispose_collection(msg.pool_name, msg.schema_name, msg.collection_name);
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
+			}
 			case db_ipc::command::ADD:
 			{
 				try
@@ -223,6 +280,10 @@ int main()
 				catch (std::bad_alloc const &)
 				{
 					msg.status = db_ipc::command_status::BAD_ALLOC;
+				}
+				catch (std::ios::failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_INSERT_KEY;
 				}
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
@@ -250,6 +311,10 @@ int main()
 				{
 					msg.status = db_ipc::command_status::BAD_ALLOC;
 				}
+				catch (std::ios::failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_UPDATE_KEY;
+				}
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
@@ -273,6 +338,10 @@ int main()
 				catch (db_storage::disposal_of_nonexistent_key_attempt_exception const &)
 				{
 					msg.status = db_ipc::command_status::ATTEMPT_TO_DISPOSE_NONEXISTENT_KEY;
+				}
+				catch (std::ios::failure const &)
+				{
+					// TODO
 				}
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
@@ -298,6 +367,10 @@ int main()
 				{
 					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
 				}
+				catch (std::ios::failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
 				
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
 				break;
@@ -321,6 +394,10 @@ int main()
 				{
 					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
 				}
+				catch (std::ios::failure const &)
+				{
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
 				
 				// TODO
 				msg.hashed_password = range[0].second.hashed_password;
@@ -334,17 +411,16 @@ int main()
 		}
     }
     
-    msgctl(mq_descriptor, IPC_RMID, nullptr);
 	db->consolidate();
     
-    std::cout << "Server shutdowned" << std::endl;
+    std::cout << "Storage server shutdowned" << std::endl;
     
-    cmd_thread.detach();
+    //cmd_thread.detach();
 }
 
 
 
-void terminal_reader()
+void run_terminal_reader()
 {
     db_ipc::strg_msg_t msg;
     std::string cmd;

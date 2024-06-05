@@ -167,11 +167,13 @@ void db_storage::collection::insert(
 	}
 	catch (std::ios::failure const &)
 	{
+		allocator::destruct(data);
 		deallocate_with_guard(data);
 		throw std::ios::failure("Failed to write data");
 	}
 	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
+		allocator::destruct(data);
 		deallocate_with_guard(data);
 		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
@@ -207,18 +209,25 @@ void db_storage::collection::insert(
 	
 	try
 	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
+		}
+		
 		_data->insert(key, data);
+	}
+	catch (std::ios::failure const &)
+	{
+		allocator::destruct(data);
+		deallocate_with_guard(data);
+		throw std::ios::failure("Failed to write data");
 	}
 	catch (search_tree<tkey, tdata *>::insertion_of_existent_key_attempt_exception_exception const &)
 	{
+		allocator::destruct(data);
 		deallocate_with_guard(data);
 		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
-	}
-	
-	if (get_instance()->_mode == mode::file_system)
-	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -251,18 +260,25 @@ void db_storage::collection::update(
 	
 	try
 	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
+		}
+		
 		_data->update(key, data);
+	}
+	catch (std::ios::failure const &)
+	{
+		allocator::destruct(data);
+		deallocate_with_guard(data);
+		throw std::ios::failure("Failed to write data");
 	}
 	catch (search_tree<tkey, tdata *>::updating_of_nonexistent_key_attempt_exception const &)
 	{
+		allocator::destruct(data);
 		deallocate_with_guard(data);
 		throw db_storage::updating_of_nonexistent_key_attempt_exception();
 		// TODO
-	}
-	
-	if (get_instance()->_mode == mode::file_system)
-	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -295,18 +311,25 @@ void db_storage::collection::update(
 	
 	try
 	{
+		if (get_instance()->_mode == mode::file_system)
+		{
+			reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
+		}
+		
 		_data->update(key, data);
+	}
+	catch (std::ios::failure const &)
+	{
+		allocator::destruct(data);
+		deallocate_with_guard(data);
+		throw std::ios::failure("Failed to write data");
 	}
 	catch (search_tree<tkey, tdata *>::updating_of_nonexistent_key_attempt_exception const &)
 	{
+		allocator::destruct(data);
 		deallocate_with_guard(data);
 		throw db_storage::updating_of_nonexistent_key_attempt_exception();
 		// TODO
-	}
-	
-	if (get_instance()->_mode == mode::file_system)
-	{
-		reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
 	}
 }
 
@@ -329,7 +352,16 @@ tvalue db_storage::collection::dispose(
 	
 	if (get_instance()->_mode == mode::file_system)
 	{
-		value = dynamic_cast<file_tdata *>(data)->deserialize(path);
+		try
+		{
+			value = dynamic_cast<file_tdata *>(data)->deserialize(path);
+		}
+		catch (std::ios::failure const &)
+		{
+			allocator::destruct(data);
+			deallocate_with_guard(data);
+			throw std::ios::failure("Failed to parse disposed data");
+		}
 	}
 	else
 	{
@@ -360,7 +392,14 @@ tvalue db_storage::collection::obtain(
 	
 	if (get_instance()->_mode == mode::file_system)
 	{
-		return dynamic_cast<file_tdata *>(data)->deserialize(path);
+		try
+		{
+			return dynamic_cast<file_tdata *>(data)->deserialize(path);
+		}
+		catch (std::ios::failure const &)
+		{
+			throw std::ios::failure("Failed to read data");
+		}
 	}
 	else
 	{
@@ -394,7 +433,14 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 	{
 		if (get_instance()->_mode == mode::file_system)
 		{
-			value_vec.emplace_back(kvp.key, dynamic_cast<file_tdata *>(kvp.value)->deserialize(path));
+			try
+			{
+				value_vec.emplace_back(kvp.key, dynamic_cast<file_tdata *>(kvp.value)->deserialize(path));
+			}
+			catch (std::ios::failure const &)
+			{
+				throw std::ios::failure("Failed to read data");
+			}
 		}
 		else
 		{
@@ -453,11 +499,11 @@ void db_storage::collection::consolidate(
 		return;
 	}
 	
-	std::string tmp_dir_path = make_path({path, "tmp"});
+	std::string tmp_dir_path = extra_utility::make_path({path, "tmp"});
 	mkdir(tmp_dir_path.c_str(), 0777);
 	
-	std::string data_path = make_path({path, std::to_string(get_instance()->_id)});
-	std::string tmp_path = make_path({path, "tmp", std::to_string(get_instance()->_id)});
+	std::string data_path = extra_utility::make_path({path, std::to_string(get_instance()->_id)});
+	std::string tmp_path = extra_utility::make_path({path, "tmp", std::to_string(get_instance()->_id)});
 	
 	switch (_tree_variant)
 	{
@@ -702,7 +748,7 @@ void db_storage::schema::consolidate(
 		
 		for (; iter != iter_end; ++iter)
 		{
-			std::get<3>(*iter).consolidate(make_path({path, std::get<2>(*iter)}));
+			std::get<3>(*iter).consolidate(extra_utility::make_path({path, std::get<2>(*iter)}));
 		}
 	}
 }
@@ -921,7 +967,7 @@ void db_storage::pool::consolidate(
 		
 		for (; iter != iter_end; ++iter)
 		{
-			std::get<3>(*iter).consolidate(make_path({path, std::get<2>(*iter)}));
+			std::get<3>(*iter).consolidate(extra_utility::make_path({path, std::get<2>(*iter)}));
 		}
 	}
 }
@@ -1047,7 +1093,7 @@ db_storage *db_storage::load_db(
 		std::string pool_name = pool_entry.path().filename();
 		db->add_pool(pool_name, search_tree_variant::b, 8); // TODO SAVE CONFIGURATION
 		
-		for (auto const &schema_entry : std::filesystem::directory_iterator(make_path({path, pool_name})))
+		for (auto const &schema_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name})))
 		{
 			if (!std::filesystem::is_directory(schema_entry))
 			{
@@ -1059,7 +1105,7 @@ db_storage *db_storage::load_db(
 			db->add_schema(pool_name, schema_name, search_tree_variant::b, 8); // TODO SAVE CONFIGURATION
 			++pool_elems_cnt;
 			
-			for (auto const &collection_entry : std::filesystem::directory_iterator(make_path({path, pool_name, schema_name})))
+			for (auto const &collection_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name, schema_name})))
 			{
 				if (!std::filesystem::is_directory(collection_entry))
 				{
@@ -1071,7 +1117,7 @@ db_storage *db_storage::load_db(
 				db->add_collection(pool_name, schema_name, collection_name, search_tree_variant::b, allocator_variant::boundary_tags, 8); // TODO SAVE CONFIGURATION
 				++schema_elems_cnt;
 				
-				for (auto const &table_entry : std::filesystem::directory_iterator(make_path({path, pool_name, schema_name, collection_name})))
+				for (auto const &table_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name, schema_name, collection_name})))
 				{
 					if (std::filesystem::is_directory(table_entry))
 					{
@@ -1132,8 +1178,8 @@ db_storage *db_storage::add_schema(
 	db_storage::search_tree_variant tree_variant,
 	size_t t_for_b_trees)
 {
-	std::string old_path = make_path({"pools", pool_name});
-	std::string new_path = make_path({"pools", pool_name, schema_name});
+	std::string old_path = extra_utility::make_path({"pools", pool_name});
+	std::string new_path = extra_utility::make_path({"pools", pool_name, schema_name});
 	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(old_path)
@@ -1164,8 +1210,8 @@ db_storage *db_storage::add_collection(
 	db_storage::allocator_variant allocator_variant,
 	size_t t_for_b_trees)
 {
-	std::string old_path = make_path({"pools", pool_name, schema_name});
-	std::string new_path = make_path({"pools", pool_name, schema_name, collection_name});
+	std::string old_path = extra_utility::make_path({"pools", pool_name, schema_name});
+	std::string new_path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name});
 	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(old_path)
@@ -1198,7 +1244,7 @@ db_storage *db_storage::add(
 	tkey const &key,
 	tvalue const &value)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(path)
@@ -1217,7 +1263,7 @@ db_storage *db_storage::add(
 	tkey const &key,
 	tvalue &&value)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(path)
@@ -1236,7 +1282,7 @@ db_storage *db_storage::update(
 	tkey const &key,
 	tvalue const &value)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(path)
@@ -1255,7 +1301,7 @@ db_storage *db_storage::update(
 	tkey const &key,
 	tvalue &&value)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	throw_if_uninutialized_at_perform()
 		.throw_if_invalid_path(path)
@@ -1273,7 +1319,7 @@ tvalue db_storage::dispose(
 	std::string const &collection_name,
 	tkey const &key)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	return throw_if_uninutialized_at_perform()
 				.throw_if_invalid_path(path)
@@ -1289,7 +1335,7 @@ tvalue db_storage::obtain(
 	std::string const &collection_name,
 	tkey const &key)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	return throw_if_uninutialized_at_perform()
 			.throw_if_invalid_path(path)
@@ -1308,7 +1354,7 @@ std::vector<std::pair<tkey, tvalue>> db_storage::obtain_between(
 	bool lower_bound_inclusive,
 	bool upper_bound_inclusive)
 {
-	std::string path = make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
 	
 	return throw_if_uninutialized_at_perform()
 			.throw_if_invalid_path(path)
@@ -1325,7 +1371,7 @@ db_storage *db_storage::consolidate()
 	
 	for (; iter != iter_end; ++iter)
 	{
-		std::get<3>(*iter).consolidate(make_path({"pools", std::get<2>(*iter)}));
+		std::get<3>(*iter).consolidate(extra_utility::make_path({"pools", std::get<2>(*iter)}));
 	}
 	
 	return this;
@@ -1390,7 +1436,7 @@ void db_storage::load_collection(
 	std::string schema_name,
 	std::string collection_name)
 {
-	std::string data_path = make_path({prefix, pool_name, schema_name, collection_name, std::to_string(get_instance()->_id)});
+	std::string data_path = extra_utility::make_path({prefix, pool_name, schema_name, collection_name, std::to_string(get_instance()->_id)});
 	
 	std::ifstream data_stream(data_path, std::ios::binary);
     if (!data_stream.is_open())
@@ -1438,22 +1484,7 @@ void db_storage::load_collection(
 
 #pragma region db storage utility common operations
 
-std::string db_storage::make_path(
-	std::initializer_list<std::string> list)
-{
-	std::string path = "";
-		
-	for (auto elem : list)
-	{
-		if (!path.empty())
-		{
-			path.push_back('/');
-		}
-		path += elem;
-	}
-	
-	return path;
-}
+// no common operations?
 
 #pragma endregion db storage utility common operations
 

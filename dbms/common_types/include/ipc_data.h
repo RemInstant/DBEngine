@@ -28,7 +28,10 @@ namespace db_ipc
 	{
 		// manage commands
 		
-		SET_IN_MEMORY_CACHE_MODE = 1,
+		ADD_STORAGE_SERVER,
+		DISPOSE_STORAGE_SERVER,
+		
+		SET_IN_MEMORY_CACHE_MODE,
 		SET_FILE_SYSTEM_MODE,
 		END_SETUP,
 		
@@ -54,6 +57,8 @@ namespace db_ipc
 	
 	enum class command_status
 	{
+		CLIENT,
+		
 		OK,
 		OBTAIN_BETWEEN_END,
 		
@@ -77,6 +82,13 @@ namespace db_ipc
 		ATTEMPT_TO_UPDATE_NONEXISTENT_KEY,
 		ATTEMPT_TO_DISPOSE_NONEXISTENT_KEY,
 		ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY,
+		
+		FAILED_TO_ADD_STRUCT,
+		FAILED_TO_PERFORM_DATA_COMMAND,
+		FAILED_TO_INSERT_KEY,
+		FAILED_TO_UPDATE_KEY,
+		FAILED_TO_DISPOSE_KEY,
+		FAILED_TO_OBTAIN_KEY,
 	};
 	
 	int constexpr STORAGE_MSG_KEY_SIZE = 64;
@@ -91,7 +103,7 @@ namespace db_ipc
 		pid_t pid;
 		command cmd;
 		command_status status;
-		size_t records_cnt;
+		size_t extra_value;
 		
 		// path
 		
@@ -115,7 +127,11 @@ namespace db_ipc
 
 	int constexpr STORAGE_SERVER_MQ_KEY = 100;
 	int constexpr STORAGE_SERVER_MSG_SIZE = sizeof(strg_msg_t) - sizeof(long);
+	
+	int constexpr STORAGE_SERVER_MAX_COMMON_PRIOR = 30;
 	int constexpr STORAGE_SERVER_MAX_COMMAND_PRIOR = 50;
+	
+	int constexpr STORAGE_SERVER_STORAGE_ADDITION_PRIOR = 31;
 	
 }
 

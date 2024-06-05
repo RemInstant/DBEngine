@@ -3,7 +3,11 @@ project(os_cw_dbms_mngr_srvr)
 
 add_executable(
         os_cw_dbms_mngr_srvr
-        client.cpp)
+        manager_server.cpp)
+target_link_libraries(
+        os_cw_dbms_mngr_srvr
+        PUBLIC
+        os_cw_cmmn)
 target_link_libraries(
         os_cw_dbms_mngr_srvr
         PUBLIC

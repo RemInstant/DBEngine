@@ -22,6 +22,12 @@ namespace extra_utility
     template<> std::string make_string(std::string const &value);
     template<> std::string make_string(char * const &value);
     
+    std::string make_path(
+	    std::initializer_list<std::string> list);
+    
+    std::string make_path(
+	    std::initializer_list<char const *> list);
+    
 }
 
 #endif //MATH_PRACTICE_AND_OPERATING_SYSTEMS_COMMON_EXTRA_UTILITY_H

@@ -8,6 +8,8 @@
 
 #include <ipc_data.h>
 
+// sudo sysctl -w kernel.yama.ptrace_scope=0
+
 struct tvalue
 {
 	int64_t hashed_passwod;
@@ -191,7 +193,7 @@ void handle_add_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::ADD;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -224,7 +226,7 @@ void handle_update_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::UPDATE;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -256,7 +258,7 @@ void handle_dispose_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::DISPOSE;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -288,7 +290,7 @@ void handle_obtain_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::OBTAIN;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	if (key2[0])
 	{
@@ -321,7 +323,7 @@ void handle_add_pool_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::ADD_POOL;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	
@@ -348,7 +350,7 @@ void handle_add_schema_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::ADD_SCHEMA;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -378,7 +380,7 @@ void handle_add_collection_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::ADD_COLLECTION;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -406,7 +408,7 @@ void handle_dispose_pool_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::DISPOSE_POOL;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	
@@ -430,7 +432,7 @@ void handle_dispose_schema_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::DISPOSE_SCHEMA;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -456,7 +458,7 @@ void handle_dispose_collection_command(
 	msg.mtype = 10;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::DISPOSE_COLLECTION;
-	msg.status = db_ipc::command_status::OK;
+	msg.status = db_ipc::command_status::CLIENT;
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
@@ -554,6 +556,41 @@ void handle_server_answer(
 			throw std::runtime_error("Entered key does not exist");
 		case db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY:
 			throw std::runtime_error("Entered key does not exist");
+			
+		case db_ipc::command_status::FAILED_TO_ADD_STRUCT:
+			switch (msg.cmd)
+			{
+				case db_ipc::command::ADD_POOL:
+					throw std::runtime_error("Failed to add pool");
+				case db_ipc::command::ADD_SCHEMA:
+					throw std::runtime_error("Failed to add schema");
+				case db_ipc::command::ADD_COLLECTION:
+					throw std::runtime_error("Failed to add collection");
+				default:
+					throw std::runtime_error("Failed to add struct");
+			}
+		case db_ipc::command_status::FAILED_TO_PERFORM_DATA_COMMAND:
+			switch (msg.cmd)
+			{
+				case db_ipc::command::ADD:
+					throw std::runtime_error("Failed to insert key");
+				case db_ipc::command::UPDATE:
+					throw std::runtime_error("Failed to update key");
+				case db_ipc::command::DISPOSE:
+					throw std::runtime_error("Failed to dispose key");
+				case db_ipc::command::OBTAIN:
+					throw std::runtime_error("Failed to obtain key");
+				default:
+					throw std::runtime_error("Failed to perform data command");
+			}
+		case db_ipc::command_status::FAILED_TO_INSERT_KEY:
+			throw std::runtime_error("Failed to insert key");
+		case db_ipc::command_status::FAILED_TO_UPDATE_KEY:
+			throw std::runtime_error("Failed to update key");
+		case db_ipc::command_status::FAILED_TO_DISPOSE_KEY:
+			throw std::runtime_error("Failed to dispose key");
+		case db_ipc::command_status::FAILED_TO_OBTAIN_KEY:
+			throw std::runtime_error("Failed to obtain key");
 	}
 	
 	switch (msg.cmd)
