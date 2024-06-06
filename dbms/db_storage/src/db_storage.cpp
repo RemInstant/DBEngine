@@ -666,10 +666,15 @@ void db_storage::collection::consolidate(
 	}
 	
 	std::string tmp_dir_path = extra_utility::make_path({path, "tmp"});
-	mkdir(tmp_dir_path.c_str(), 0777);
-	
 	std::string data_path = extra_utility::make_path({path, std::to_string(get_instance()->_id)});
 	std::string tmp_path = extra_utility::make_path({path, "tmp", std::to_string(get_instance()->_id)});
+	
+	if (access(data_path.c_str(), F_OK) == -1)
+	{
+		return;
+	}
+	
+	mkdir(tmp_dir_path.c_str(), 0777);
 	
 	switch (_tree_variant)
 	{
@@ -699,16 +704,16 @@ void db_storage::collection::consolidate(
 			}
 			tmp_stream.flush();
 			
-			std::fstream data_stream(data_path, std::ios::out | std::ios::binary | std::ios::trunc);
-			if (!data_stream.is_open())
-			{
-				throw std::runtime_error("File error!"); // TODO
-			}
-			
 			tmp_stream.open(tmp_path, std::ios::in | std::ios::binary);
 			if (!tmp_stream.is_open())
 			{
-				throw std::runtime_error("Tmp file error!");
+				throw std::ios::failure("Failed to open tmp fail");
+			}
+			
+			std::fstream data_stream(data_path, std::ios::out | std::ios::binary | std::ios::trunc);
+			if (!data_stream.is_open())
+			{
+				throw std::ios::failure("Failed to open data file");
 			}
 			
 			(data_stream << tmp_stream.rdbuf()).flush();
@@ -1260,18 +1265,12 @@ db_storage *db_storage::load_db(
 	
     for (auto const &pool_entry : std::filesystem::directory_iterator(path))
     {
-		if (!std::filesystem::is_directory(pool_entry))
-		{
-			continue;
-		}
+		if (!std::filesystem::is_directory(pool_entry)) continue;
 		
 		std::string pool_name = pool_entry.path().filename();
 		std::string pool_cfg_path = extra_utility::make_path({path, pool_name, "cfg"});
 		
-		if (access(pool_cfg_path.c_str(), F_OK) == -1)
-		{
-			continue;
-		}
+		if (access(pool_cfg_path.c_str(), F_OK) == -1) continue;
 		
 		int b_tree_variant, t_for_b_trees;
 		
@@ -1287,18 +1286,12 @@ db_storage *db_storage::load_db(
 		
 		for (auto const &schema_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name})))
 		{
-			if (!std::filesystem::is_directory(schema_entry))
-			{
-				continue;
-			}
+			if (!std::filesystem::is_directory(schema_entry)) continue;
 			
 			std::string schema_name = schema_entry.path().filename();
 			std::string schema_cfg_path = extra_utility::make_path({path, pool_name, schema_name, "cfg"});
 			
-			if (access(schema_cfg_path.c_str(), F_OK) == -1)
-			{
-				continue;
-			}
+			if (access(schema_cfg_path.c_str(), F_OK) == -1) continue;
 			
 			int b_tree_variant, t_for_b_trees;
 			
@@ -1314,18 +1307,12 @@ db_storage *db_storage::load_db(
 			
 			for (auto const &collection_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name, schema_name})))
 			{
-				if (!std::filesystem::is_directory(collection_entry))
-				{
-					continue;
-				}
+				if (!std::filesystem::is_directory(collection_entry)) continue;
 				
 				std::string collection_name = collection_entry.path().filename();
 				std::string collection_cfg_path = extra_utility::make_path({path, pool_name, schema_name, collection_name, "cfg"});
 			
-				if (access(collection_cfg_path.c_str(), F_OK) == -1)
-				{
-					continue;
-				}
+				if (access(collection_cfg_path.c_str(), F_OK) == -1) continue;
 				
 				int b_tree_variant, alloc_variant, alloc_fit_mode, t_for_b_trees;
 				
@@ -1345,14 +1332,75 @@ db_storage *db_storage::load_db(
 				
 				for (auto const &table_entry : std::filesystem::directory_iterator(extra_utility::make_path({path, pool_name, schema_name, collection_name})))
 				{
-					if (std::filesystem::is_directory(table_entry))
-					{
-						continue;
-					}
+					if (std::filesystem::is_directory(table_entry)) continue;
 					
 					if (table_entry.path().filename() == std::to_string(get_instance()->_id))
 					{
 						load_collection(path, pool_name, schema_name, collection_name);
+					}
+				}
+			}
+		}
+    }
+	
+	try
+	{
+		consolidate();
+	}
+	catch (std::ios::failure const &ex)
+	{
+		// okay that was unnessary
+	}
+	
+	return this;
+}
+
+db_storage *db_storage::clear()
+{
+	if (get_instance()->_mode == mode::in_memory_cache)
+	{
+		return this;
+	}
+	
+	if (access("pools", F_OK) == -1)
+    {
+		return this;
+    }
+	
+    for (auto const &pool_entry : std::filesystem::directory_iterator("pools"))
+    {
+		if (!std::filesystem::is_directory(pool_entry)) continue;
+		
+		std::string pool_name = pool_entry.path().filename();
+		std::string pool_cfg_path = extra_utility::make_path({"pools", pool_name, "cfg"});
+		
+		if (access(pool_cfg_path.c_str(), F_OK) == -1) continue;
+		
+		for (auto const &schema_entry : std::filesystem::directory_iterator(extra_utility::make_path({"pools", pool_name})))
+		{
+			if (!std::filesystem::is_directory(schema_entry)) continue;
+			
+			std::string schema_name = schema_entry.path().filename();
+			std::string schema_cfg_path = extra_utility::make_path({"pools", pool_name, schema_name, "cfg"});
+			
+			if (access(schema_cfg_path.c_str(), F_OK) == -1) continue;
+			
+			for (auto const &collection_entry : std::filesystem::directory_iterator(extra_utility::make_path({"pools", pool_name, schema_name})))
+			{
+				if (!std::filesystem::is_directory(collection_entry)) continue;
+				
+				std::string collection_name = collection_entry.path().filename();
+				std::string collection_cfg_path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, "cfg"});
+			
+				if (access(collection_cfg_path.c_str(), F_OK) == -1) continue;
+				
+				for (auto const &table_entry : std::filesystem::directory_iterator(extra_utility::make_path({"pools", pool_name, schema_name, collection_name})))
+				{
+					if (std::filesystem::is_directory(table_entry)) continue;
+					
+					if (table_entry.path().filename() == std::to_string(get_instance()->_id))
+					{
+						remove(table_entry.path().c_str());
 					}
 				}
 			}

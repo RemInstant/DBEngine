@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <string>
 #include <cstring>
@@ -19,7 +20,7 @@ void run_terminal_reader();
 
 #include "sys/stat.h"
 
-int main()
+int main(int argc, char** argv)
 {	
 	pid_t pid = getpid();
 	
@@ -39,13 +40,19 @@ int main()
 	}
 	
 	pid = getpid();
+	size_t id;
+	
+	if (argc > 0)
+	{
+		id = std::stoi(argv[0]);
+	}
 	
 	db_ipc::strg_msg_t msg;
 	db_storage *db = db_storage::get_instance();
 	bool is_setup = false;
 	
 	logger *logger = nullptr;
-	std::string log_base = "[STRG " + std::to_string(db->get_id()) + ":" + std::to_string(getpid()) + "]";
+	std::string log_base = "[STRG " + std::to_string(id) + ":" + std::to_string(getpid()) + "]";
 	
 	try
 	{
@@ -65,42 +72,29 @@ int main()
     mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
     {
-        std::cout << "Cannot create the queue. Shut down." << std::endl;
+        std::cout << "Cannot open the message queue. Shutdown." << std::endl;
+		logger->error(log_base + "[-----] Failed to open message queue");
         return 2;
     }
-    
-	// db->setup(1, db_storage::mode::in_memory_cache);
-	// db->setup(1, db_storage::mode::file_system);
-	// db->load_db("pools");
 	
-	// db->add_pool("p", db_storage::search_tree_variant::b, 4);
-	// db->add_schema("p", "s", db_storage::search_tree_variant::b, 4);
-	// db->add_collection("p", "s", "c", db_storage::search_tree_variant::b, db_storage::allocator_variant::boundary_tags, 4);
-	
-	// db->add("p", "s", "c", "1", tvalue(1, "1"));
-	// db->add("p", "s", "c", "2", tvalue(2, "2"));
-	// db->add("p", "s", "c", "3", tvalue(3, "3"));
-	// db->add("p", "s", "c", "4", tvalue(4, "4"));
-	// db->add("p", "s", "c", "5", tvalue(5, "5"));
-	
-	// db->dispose("p", "s", "c", "2");
-	// db->dispose("p", "s", "c", "4");
-	
-    //std::thread cmd_thread(run_terminal_reader);
+	logger->information(log_base + "[-----] Server started");
 	
     while (run_flag)
     {
         ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, pid, MSG_NOERROR);
         if (rcv_cnt == -1)
         {
-            std::cout << "An error occured while receiving the message" << std::endl;
+			logger->error(log_base + "[-----] An error occurred while receiving the message. Shutdown");
+            std::cout << "An error occurred while receiving the message" << std::endl;
             break;
         }
 		
-		std::cout << "read from " << msg.pid << std::endl;
-		std::string log_start = log_base + "[" + std::to_string(msg.pid) + "] ";
+		std::string pid_str = std::to_string(msg.pid);
+		while (pid_str.size() < 5) pid_str = "0" + pid_str;
 		
-		msg.mtype = 8;
+		std::string log_start = log_base + "[" + pid_str + "] ";
+		
+		msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR;
 		msg.status = db_ipc::command_status::OK;
         
 		switch (msg.cmd)
@@ -110,10 +104,12 @@ int main()
 				if (is_setup)
 				{
 					msg.status = db_ipc::command_status::ATTEMPT_TO_CHANGE_SETUP;
+					logger->error(log_start + "Attempt to change setup");
 				}
 				else
 				{
 					db->setup(msg.extra_value, db_storage::mode::in_memory_cache);
+					logger->information(log_start + "Server is setup with 'in memory cache' mode");
 				}
 				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
@@ -124,6 +120,7 @@ int main()
 				if (is_setup)
 				{
 					msg.status = db_ipc::command_status::ATTEMPT_TO_CHANGE_SETUP;
+					logger->error(log_start + "Attempt to change setup");
 				}
 				else
 				{
@@ -134,17 +131,26 @@ int main()
 					}
 					catch (db_storage::setup_failure const &)
 					{
+						logger->information(log_start + "Failed to setup with 'file system' mode");
 						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
 					}
 					catch (db_storage::invalid_path_exception const &)
 					{
+						logger->information(log_start + "Failed to setup with 'file system' mode due to invalid path");
 						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
 					}
 					catch (std::ios::failure const &)
 					{
+						logger->information(log_start + "Failed to setup with 'file system' mode dut to fyle system error");
 						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
 					}
 				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+					logger->information(log_start + "Server is setup with 'file_system' mode");
+				}
+				
 				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
 				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
@@ -156,6 +162,14 @@ int main()
 			case db_ipc::command::SHUTDOWN:
 			{
 				run_flag = 0;
+				logger->information(log_start + "Server shutdowns");
+				break;
+			}
+			case db_ipc::command::TERMINATE:
+			{
+				run_flag = 0;
+				db->clear();
+				logger->information(log_start + "Server shutdowns");
 				break;
 			}
 			case db_ipc::command::GET_RECORDS_CNT:
@@ -633,7 +647,7 @@ int main()
                     if (i == range.size() - 1)
                     {
 						sleep(1);
-						msg.mtype = 9;
+						//msg.mtype = 9; // TODO CHECK
                         msg.status = db_ipc::command_status::OBTAIN_BETWEEN_END;
                     }
                     strcpy(msg.login, range[i].first.c_str());
@@ -685,7 +699,7 @@ int main()
                     logger->information(log_start + "Obtained min key '" + msg.login + "' in collection '" +
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
-
+				
                 msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
                 break;
             }
@@ -729,7 +743,7 @@ int main()
                     logger->information(log_start + "Obtained max key '" + msg.login + "' in collection '" +
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
-
+				
                 msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
                 break;
             }

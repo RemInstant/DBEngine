@@ -451,6 +451,8 @@ public:
 	
 	db_storage *load_db(
 		std::string path);
+		
+	db_storage *clear();
 
 	db_storage *add_pool(
 		std::string const &pool_name,
