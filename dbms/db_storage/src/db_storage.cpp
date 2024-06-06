@@ -7,8 +7,13 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#include "../include/db_storage.h"
+#include <allocator_boundary_tags.h>
+#include <allocator_buddies_system.h>
+#include <allocator_global_heap.h>
+#include <allocator_sorted_list.h>
+#include <allocator_red_black_tree.h>
 
+#include "../include/db_storage.h"
 
 #pragma region exceptions implementation
 
@@ -83,28 +88,45 @@ db_storage::collection::collection(
 {
 	switch (tree_variant)
 	{
-	case search_tree_variant::b:
-		//break;
-	case search_tree_variant::b_plus:
-		//break;
-	case search_tree_variant::b_star:
-		//break;
-	case search_tree_variant::b_star_plus:
-		//break;
-	default:
-		try
-		{
+		case search_tree_variant::b:
+			//break;
+		case search_tree_variant::b_plus:
+			//break;
+		case search_tree_variant::b_star:
+			//break;
+		case search_tree_variant::b_star_plus:
+			//break;
+		default:
 			_data = new b_tree<tkey, tdata *>(t_for_b_trees, tkey_comparer());
-		}
-		catch (std::bad_alloc const &)
-		{
-			// TODO LOG
-			throw;
-		}
-		break;
+			break;
 	}
 	
-	// TODO ALLOCATORS IMPORTANT
+	try
+	{
+		switch (_allocator_variant)
+		{
+			case allocator_variant::boundary_tags:
+				_allocator = std::make_shared<allocator_boundary_tags>(1 << 22, nullptr, nullptr, _fit_mode);
+				break;
+			case allocator_variant::buddy_system:
+				_allocator = std::make_shared<allocator_buddies_system>(22, nullptr, nullptr, _fit_mode);
+				break;
+			case allocator_variant::global_heap:
+				_allocator = std::make_shared<allocator_global_heap>();
+				break;
+			case allocator_variant::red_black_tree:
+				_allocator = std::make_shared<allocator_red_black_tree>(1 << 22, nullptr, nullptr, _fit_mode);
+				break;
+			case allocator_variant::sorted_list:
+				_allocator = std::make_shared<allocator_sorted_list>(1 << 22, nullptr, nullptr, _fit_mode);
+				break;
+		}
+	}
+	catch (std::bad_alloc const &)
+	{
+		delete _data;
+		throw;
+	}
 }
 
 db_storage::collection::~collection()
@@ -744,7 +766,9 @@ void db_storage::collection::consolidate(
 void db_storage::collection::clear()
 {
 	delete _data;
+	
 	_data = nullptr;
+	_allocator = nullptr;
 };
 
 void db_storage::collection::copy_from(
@@ -774,7 +798,8 @@ void db_storage::collection::copy_from(
 		break;
 	}
 	
-	// TODO ALLOCATORS
+	_fit_mode = other._fit_mode;
+	_allocator = other._allocator;
 };
 
 void db_storage::collection::move_from(
@@ -804,9 +829,8 @@ void db_storage::collection::move_from(
 		break;
 	}
 	
-	other._data = nullptr;
-	
-	// TODO ALLOCATORS
+	_fit_mode = other._fit_mode;
+	_allocator = std::move(other._allocator);
 };
 
 void db_storage::collection::collect_garbage(
@@ -821,7 +845,7 @@ void db_storage::collection::collect_garbage(
 
 [[nodiscard]] inline allocator *db_storage::collection::get_allocator() const
 {
-	return _allocator;
+	return _allocator.get();
 }
 
 #pragma endregion collection implementation

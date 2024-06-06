@@ -1,5 +1,5 @@
-#ifndef MATH_PRACTICE_AND_OPERATING_SYSTEMS_SEARCH_TREE_H
-#define MATH_PRACTICE_AND_OPERATING_SYSTEMS_SEARCH_TREE_H
+#ifndef OPERATING_SYSTEMS_COURSE_WORK_SEARCH_TREE_H
+#define OPERATING_SYSTEMS_COURSE_WORK_SEARCH_TREE_H
 
 #include <iostream>
 #include <functional>
@@ -576,4 +576,4 @@ inline std::string search_tree<tkey, tvalue>::get_typename() const noexcept
     return "search_tree<tkey, tvalue>";
 }
 
-#endif //MATH_PRACTICE_AND_OPERATING_SYSTEMS_SEARCH_TREE_H
+#endif //OPERATING_SYSTEMS_COURSE_WORK_SEARCH_TREE_H

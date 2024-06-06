@@ -1,6 +1,8 @@
 #ifndef OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE
 #define OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_STORAGE_DATABASE
 
+#include <memory>
+
 #include <extra_utility.h>
 #include <search_tree.h>
 #include <b_tree.h>
@@ -186,7 +188,7 @@ private:
 		search_tree<tkey, tdata *> *_data;
 		search_tree_variant _tree_variant;
 		
-		allocator *_allocator;
+		std::shared_ptr<allocator> _allocator;
 		allocator_variant _allocator_variant;
 		allocator_with_fit_mode::fit_mode _fit_mode;
 		

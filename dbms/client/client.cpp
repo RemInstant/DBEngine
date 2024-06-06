@@ -713,8 +713,6 @@ void handle_server_answer(
 		default:
 			throw std::runtime_error("Invalid server answer");
 	}
-	
-	std::cout << std::endl;
 }
 
 int msgrcvt(
@@ -875,6 +873,10 @@ void run_session(
 			{
 				throw;
 			}
+		}
+		if (is_terminal)
+		{
+			std::cout << std::endl;
 		}
     }
 }

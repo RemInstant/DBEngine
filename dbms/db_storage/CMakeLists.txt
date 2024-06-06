@@ -37,6 +37,31 @@ target_link_libraries(
 target_link_libraries(
         os_cw_dbms_db_strg
         PUBLIC
+        os_cw_allctr_allctr_bndr_tgs)
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
+        os_cw_allctr_allctr_buds_ssm)
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
+        os_cw_allctr_allctr_glbl_hp)
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
+        os_cw_allctr_allctr_rbt)
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
+        os_cw_allctr_allctr_std_lst)
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
+        os_cw_allctr_allctr)
+        
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
         os_cw_dbms_cmmn_types)
 set_target_properties(
         os_cw_dbms_db_strg PROPERTIES

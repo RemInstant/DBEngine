@@ -89,6 +89,9 @@ int main(int argc, char** argv)
             break;
         }
 		
+		usleep(100);
+		std::cout << static_cast<int>(msg.cmd) << std::endl;
+		
 		std::string pid_str = std::to_string(msg.pid);
 		while (pid_str.size() < 5) pid_str = "0" + pid_str;
 		

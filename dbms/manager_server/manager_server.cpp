@@ -128,7 +128,7 @@ int main()
 {
     msgctl(msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666), IPC_RMID, nullptr);
     
-    bool is_filesystem = true;
+    bool is_filesystem = false;
     size_t data_change_counter = 0;
     
     db_ipc::strg_msg_t msg;
@@ -154,6 +154,10 @@ int main()
             std::cout << "Servers count set to 1" << std::endl;
             initial_strg_servers_cnt = 1;
         }
+    }
+    else
+    {
+        initial_strg_servers_cnt = 1;
     }
     
     std::thread cmd_thread(run_terminal_reader, &strg_servers);
@@ -1001,8 +1005,11 @@ void handle_add_struct_command(
             }
         }
         
-        separators[db_path(msg.pool_name, msg.schema_name, msg.collection_name)] =
+        if (msg.cmd == db_ipc::command::ADD_COLLECTION)
+        {
+            separators[db_path(msg.pool_name, msg.schema_name, msg.collection_name)] =
                 std::vector<std::string>(strg_servers.size() - 1, std::string(db_ipc::MSG_KEY_SIZE, 127));
+        }
         
         msg.mtype = msg.pid;
         msg.status = db_ipc::command_status::OK;
@@ -1038,7 +1045,10 @@ void handle_dispose_struct_command(
             }
         }
         
-        separators.erase(db_path(msg.pool_name, msg.schema_name, msg.collection_name));
+        if (msg.cmd == db_ipc::command::DISPOSE_COLLECTION)
+        {
+            separators.erase(db_path(msg.pool_name, msg.schema_name, msg.collection_name));
+        }
         
         msg.mtype = msg.pid;
         msg.status = db_ipc::command_status::OK;
