@@ -807,8 +807,9 @@ void allocator_red_black_tree::deallocate(
     auto* mem_begin = reinterpret_cast<unsigned char*>(_trusted_memory) + allocator_meta_size;
     auto* mem_end = reinterpret_cast<unsigned char*>(_trusted_memory) + allocator_meta_size + get_allocator_data_size();
 
-    if (at_allocator != this || at < mem_begin || at >= mem_end)
+    if (at < mem_begin || at >= mem_end)
     {
+        std::cout << (at_allocator != this) << " " << (at < mem_begin) << " " << (at >= mem_end) << std::endl;
         error_with_guard(get_typename() + "::deallocate(void *at) trying to deallocate non-related memory");
         throw std::logic_error(get_typename() + "::deallocate(void *at) trying to deallocate non-related memory");
     }

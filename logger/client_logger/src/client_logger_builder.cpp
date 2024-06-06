@@ -71,33 +71,40 @@ logger_builder* client_logger_builder::transform_with_configuration(
         ind = tmp_ind + 1;
     }
     
-    nlohmann::json json_obj = nlohmann::json::parse(stream);
-    
-    for (auto path_elem : data_path_components)
+    try
     {
-        json_obj = json_obj[path_elem];
-    }
+        nlohmann::json json_obj = nlohmann::json::parse(stream);
     
-    clear();
-    
-    _format_string = json_obj["format_string"];
-    json_obj = json_obj["logger_files"];
-    
-    for (auto &[file_path, severities] : json_obj.items())
-    {
-        for (std::string severity_str : severities)
+        for (auto path_elem : data_path_components)
         {
-            logger::severity severity = client_logger::string_to_severity(severity_str);
-            
-            if (file_path == "console")
+            json_obj = json_obj[path_elem];
+        }
+        
+        clear();
+        
+        _format_string = json_obj["format_string"];
+        json_obj = json_obj["logger_files"];
+        
+        for (auto &[file_path, severities] : json_obj.items())
+        {
+            for (std::string severity_str : severities)
             {
-                add_console_stream(severity);
-            }
-            else
-            {
-                add_file_stream(file_path, severity);
+                logger::severity severity = client_logger::string_to_severity(severity_str);
+                
+                if (file_path == "console")
+                {
+                    add_console_stream(severity);
+                }
+                else
+                {
+                    add_file_stream(file_path, severity);
+                }
             }
         }
+    }
+    catch (...)
+    {
+        throw std::runtime_error("Invalid JSON data path");
     }
     
     return this;

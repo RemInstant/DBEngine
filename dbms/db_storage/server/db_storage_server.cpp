@@ -8,6 +8,7 @@
 #include <sys/msg.h>
 #include <sys/wait.h>
 
+#include <file_cannot_be_opened.h>
 #include <tdata.h>
 #include <db_storage.h>
 #include <ipc_data.h>
@@ -57,9 +58,11 @@ int main(int argc, char** argv)
 	try
 	{
 		logger = server_logger_builder()
-			.add_file_stream("123", logger::severity::information)
-			->add_file_stream("123", logger::severity::error)
+			.add_file_stream("logs", logger::severity::information)
+			->add_file_stream("logs", logger::severity::error)
+			->add_file_stream("logs", logger::severity::warning)
 			->add_console_stream(logger::severity::information)
+			->add_console_stream(logger::severity::warning)
 			->add_console_stream(logger::severity::error)
 			->build();
 	}
@@ -68,6 +71,16 @@ int main(int argc, char** argv)
         std::cout << "Critical bad alloc" << std::endl;
 		return 1;
 	}
+    catch (file_cannot_be_opened const &)
+    {
+        std::cout << "Logger path cannot be opened" << std::endl;
+        return 1;
+    }
+    catch (std::runtime_error const &ex)
+    {
+        std::cout << ex.what() << std::endl;
+        return 1;
+    }
 	
     mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
@@ -89,8 +102,6 @@ int main(int argc, char** argv)
             break;
         }
 		
-		usleep(100);
-		std::cout << static_cast<int>(msg.cmd) << std::endl;
 		
 		std::string pid_str = std::to_string(msg.pid);
 		while (pid_str.size() < 5) pid_str = "0" + pid_str;
@@ -193,6 +204,11 @@ int main(int argc, char** argv)
                     logger->error(log_start + "Failed to add pool");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					logger->error(log_start + "Failed to add pool due to invalid path");
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
                     logger->error(log_start + "Failed to add pool due to invalid name");
@@ -239,6 +255,11 @@ int main(int argc, char** argv)
 				{
                     logger->error(log_start + "Failed to add schema");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					logger->error(log_start + "Failed to add schema due to invalid path");
+					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
@@ -289,6 +310,11 @@ int main(int argc, char** argv)
 				{
                     logger->error(log_start + "Failed to add collection");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+					logger->error(log_start + "Failed to add collection due to invalid path");
+					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{

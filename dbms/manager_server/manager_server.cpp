@@ -19,6 +19,9 @@
 #include <ipc_data.h>
 #include <tdata.h>
 #include <b_tree.h>
+#include <file_cannot_be_opened.h>
+
+#include <server_logger.h>
 
 struct db_path
 {
@@ -46,16 +49,6 @@ public:
     }
 };
 
-template<>
-struct std::hash<db_path>
-{
-    std::size_t operator()(const db_path& s) const noexcept
-    {
-        return std::hash<std::string>{}(s.pool + s.schema + s.collection);
-    }
-};
-
-
 
 int run_flag = 1;
 int mq_descriptor = -1;
@@ -75,7 +68,7 @@ void load_separators(
 void run_terminal_reader(
     std::vector<pid_t> *strg_servers);
 
-void run_assistant_reader();
+pid_t run_server_logger();
 
 pid_t run_storage_server(
     size_t strg_server_id);
@@ -90,6 +83,7 @@ int redistribute_keys(
     std::vector<pid_t> const &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators);
 
+#pragma region command handlers
 
 void handle_add_server_command(
     bool is_filesystem,
@@ -122,17 +116,70 @@ void handle_obtain_between_command(
     std::map<db_path, std::vector<std::string>> const &separators,
     db_ipc::strg_msg_t &msg);
 
+#pragma endregion command handler
 
+// /home/remi/Code/VSCode/os_cw/build/dbms/manager_server/os_cw_dbms_mngr_srvr -m logger_config.json server_logger_builder.config
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc != 2)
+    {
+        std::cout << "Usage: ./exe <-f/-m>" << std::endl;
+        return 0;
+    }
+    
+    bool is_filesystem;
+    std::string mode = std::string(argv[1]);
+
+    if (mode == "-m")
+    {
+        is_filesystem = false;
+    }
+    else if (mode == "-f")
+    {
+        is_filesystem = true;
+    }
+    else
+    {
+        std::cout << "Invalid mode" << std::endl;
+        return 1;
+    }
+    
+    logger *log = nullptr;
+    
+    try
+    {
+        log = server_logger_builder()
+			.add_file_stream("logs", logger::severity::information)
+			->add_file_stream("logs", logger::severity::error)
+			->add_file_stream("logs", logger::severity::warning)
+			->add_console_stream(logger::severity::information)
+			->add_console_stream(logger::severity::warning)
+			->add_console_stream(logger::severity::error)
+			->build();
+    }
+    catch (std::bad_alloc const &)
+    {
+        std::cout << "Critical bad alloc" << std::endl;
+        return 1;
+    }
+    catch (file_cannot_be_opened const &)
+    {
+        std::cout << "Logger path cannot be opened" << std::endl;
+        return 1;
+    }
+    catch (std::runtime_error const &ex)
+    {
+        std::cout << ex.what() << std::endl;
+        return 1;
+    }
+    
     msgctl(msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666), IPC_RMID, nullptr);
     
-    bool is_filesystem = false;
     size_t data_change_counter = 0;
     
     db_ipc::strg_msg_t msg;
-    size_t initial_strg_servers_cnt;
+    size_t initial_strg_servers_cnt = 1;
     std::vector<pid_t> strg_servers;
     std::map<db_path, std::vector<std::string>> separators;
     
@@ -154,10 +201,6 @@ int main()
             std::cout << "Servers count set to 1" << std::endl;
             initial_strg_servers_cnt = 1;
         }
-    }
-    else
-    {
-        initial_strg_servers_cnt = 1;
     }
     
     std::thread cmd_thread(run_terminal_reader, &strg_servers);
@@ -193,7 +236,8 @@ int main()
             break;
         }
         
-        std::cout << "MNGR (" << getpid() << ") read from " << msg.pid << std::endl;
+        log->information("[Manager " + std::to_string(getpid()) + "] read from " + std::to_string(msg.pid));
+        std::cout << "[Manager " << getpid() << "] read from " << msg.pid << std::endl;
         
         msg.mtype = msg.pid;
         
@@ -302,6 +346,7 @@ int main()
     
     std::cout << "Server shutdowned" << std::endl;
     
+    delete log;
     cmd_thread.detach();
 }
 
@@ -461,33 +506,6 @@ void run_terminal_reader(
             msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
         }
     }
-}
-
-void run_assistant_reader()
-{
-    db_ipc::strg_msg_t msg;
-    
-    std::cout << "Assistant started" << std::endl;
-    
-    while (true)
-    {
-        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, db_ipc::MANAGER_SERVER_CLIENT_PING_PRIOR, MSG_NOERROR);
-        
-        if (msg.cmd == db_ipc::command::TERMINATE_ASSISTANT_THREAD)
-        {
-            break;
-        }
-        
-        
-        std::cout << "Assistant send" << std::endl;
-        
-        msg.status = db_ipc::command_status::SERVER_IS_BUSY;
-        msg.mtype = msg.pid;
-        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
-    }
-    
-    
-    std::cout << "Assistant end" << std::endl;
 }
 
 #pragma region ipc utility
@@ -779,7 +797,7 @@ pid_t run_storage_server(
     if (pid == -1)
     {
         std::cout << "fork error" << std::endl;
-        // todo throw;
+        // todo throw
         return -1;
     }
     
@@ -859,10 +877,6 @@ int redistribute_path_keys(
     {
         return 0;
     }
-    // if (sum < 2 * sz)
-    // {
-    //     return 0;
-    // }
     
     size_t target_cnt = sum / sz;
     size_t additional = sum % sz;
@@ -989,12 +1003,6 @@ void handle_add_struct_command(
                     
                     rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE,
                             db_ipc::MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR);
-                    
-                    if (rcv == -1 || msg.status != db_ipc::command_status::OK)
-                    {
-                        std::cout << "pu pu pu" << std::endl;
-                        // TODO;
-                    }
                 }
                 
                 msg.mtype = msg.pid;

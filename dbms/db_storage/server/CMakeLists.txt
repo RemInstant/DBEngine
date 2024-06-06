@@ -16,6 +16,10 @@ target_link_libraries(
         os_cw_dbms_db_strg_srvr
         PUBLIC
         os_cw_lggr_srvr_lggr)
+target_link_libraries(
+        os_cw_dbms_db_strg_srvr
+        PUBLIC
+        os_cw_cmmn)
 set_target_properties(
         os_cw_dbms_db_strg_srvr PROPERTIES
         LANGUAGES CXX

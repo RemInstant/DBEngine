@@ -25,6 +25,10 @@ target_link_libraries(
         os_cw_dbms_mngr_srvr
         PUBLIC
         os_cw_assctv_cntnr_srch_tr_indxng_tr_b_tr)
+target_link_libraries(
+        os_cw_dbms_mngr_srvr
+        PUBLIC
+        os_cw_lggr_srvr_lggr)
 
 set_target_properties(
         os_cw_dbms_mngr_srvr PROPERTIES
