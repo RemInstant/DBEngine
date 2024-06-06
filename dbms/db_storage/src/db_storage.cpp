@@ -440,17 +440,8 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 	bool upper_bound_inclusive,
 	std::string const &path)
 {
-	std::vector<typename associative_container<tkey, tdata *>::key_value_pair> data_vec;
-	
-	try
-	{
-		data_vec =  _data->obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive);
-	}
-	catch (search_tree<tkey, tdata *>::obtaining_of_nonexistent_key_attempt_exception const &)
-	{
-		throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
-		// TODO
-	}
+	std::vector<typename associative_container<tkey, tdata *>::key_value_pair> data_vec =
+			_data->obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive);
 	
 	std::vector<std::pair<tkey, tvalue>> value_vec;
 	value_vec.reserve(data_vec.size());
@@ -477,9 +468,10 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 	return value_vec;
 }
 
-tvalue db_storage::collection::obtain_max(
+std::pair<tkey, tvalue> db_storage::collection::obtain_max(
 	std::string const &path)
 {
+	tkey key;
 	tdata *data = nullptr;
 	
 	switch (_tree_variant)
@@ -496,7 +488,8 @@ tvalue db_storage::collection::obtain_max(
 				throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
 			}
 			
-			data = std::get<3>(*tree->rbegin_infix());
+			key = std::get<2>(*iter);
+			data = std::get<3>(*iter);
 		}
 			
 	}
@@ -505,7 +498,7 @@ tvalue db_storage::collection::obtain_max(
 	{
 		try
 		{
-			return dynamic_cast<file_tdata *>(data)->deserialize(path);
+			return make_pair(key, dynamic_cast<file_tdata *>(data)->deserialize(path));
 		}
 		catch (std::ios::failure const &)
 		{
@@ -514,7 +507,106 @@ tvalue db_storage::collection::obtain_max(
 	}
 	else
 	{
-		return dynamic_cast<ram_tdata *>(data)->value;
+		return make_pair(key, dynamic_cast<ram_tdata *>(data)->value);
+	}
+};
+
+std::pair<tkey, tvalue> db_storage::collection::obtain_next(
+	std::string const &path,
+		tkey const &key)
+{
+	tkey next_key;
+	tdata *data = nullptr;
+	
+	switch (_tree_variant)
+	{
+		default:
+		{
+			b_tree<tkey, tdata *> *tree = dynamic_cast<b_tree<tkey, tdata *> *>(_data);
+			
+			auto iter = tree->begin_infix();
+			auto iter_end = tree->end_infix();
+			
+			while (iter != iter_end && tkey_comparer()(key, std::get<2>(*iter)))
+			{
+				++iter;
+			}
+			
+			if (iter == iter_end)
+			{
+				throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
+			}
+			
+			next_key = std::get<2>(*iter);
+			data = std::get<3>(*iter);
+			
+			if (++iter != iter_end)
+			{
+				next_key = std::get<2>(*iter);
+				data = std::get<3>(*iter);
+			}
+			
+		}
+			
+	}
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		try
+		{
+			return make_pair(next_key, dynamic_cast<file_tdata *>(data)->deserialize(path));
+		}
+		catch (std::ios::failure const &)
+		{
+			throw std::ios::failure("Failed to read data");
+		}
+	}
+	else
+	{
+		return make_pair(next_key, dynamic_cast<ram_tdata *>(data)->value);
+	}
+};
+
+std::pair<tkey, tvalue> db_storage::collection::obtain_min(
+	std::string const &path)
+{
+	tkey key;
+	tdata *data = nullptr;
+	
+	switch (_tree_variant)
+	{
+		default:
+		{
+			b_tree<tkey, tdata *> *tree = dynamic_cast<b_tree<tkey, tdata *> *>(_data);
+			
+			auto iter = tree->begin_infix();
+			auto iter_end = tree->end_infix();
+			
+			if (iter == iter_end)
+			{
+				throw db_storage::obtaining_of_nonexistent_key_attempt_exception();
+			}
+			
+			key = std::get<2>(*iter);
+			data = std::get<3>(*iter);
+		}
+			
+	}
+	
+	if (get_instance()->_mode == mode::file_system)
+	{
+		try
+		{
+			return make_pair(key, dynamic_cast<file_tdata *>(data)->deserialize(path));
+		}
+		catch (std::ios::failure const &)
+		{
+			throw std::ios::failure("Failed to read data");
+		}
+	}
+	else
+	{
+		return make_pair(key, dynamic_cast<ram_tdata *>(data)->value);
 	}
 };
 
@@ -561,6 +653,8 @@ void db_storage::collection::load(
 		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
 	}
+	
+	++_records_cnt;
 }
 
 void db_storage::collection::consolidate(
@@ -1636,7 +1730,22 @@ std::vector<std::pair<tkey, tvalue>> db_storage::obtain_between(
 			.obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive, path);
 }
 
-tvalue db_storage::obtain_max(
+std::pair<tkey, tvalue> db_storage::obtain_min(
+	std::string const &pool_name,
+	std::string const &schema_name,
+	std::string const &collection_name)
+{
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	
+	return throw_if_uninutialized_at_perform()
+			.throw_if_invalid_path(path)
+			.obtain(pool_name)
+			.obtain(schema_name)
+			.obtain(collection_name)
+			.obtain_min(path);
+}
+
+std::pair<tkey, tvalue> db_storage::obtain_max(
 	std::string const &pool_name,
 	std::string const &schema_name,
 	std::string const &collection_name)
@@ -1649,6 +1758,22 @@ tvalue db_storage::obtain_max(
 			.obtain(schema_name)
 			.obtain(collection_name)
 			.obtain_max(path);
+}
+
+std::pair<tkey, tvalue> db_storage::obtain_next(
+	std::string const &pool_name,
+	std::string const &schema_name,
+	std::string const &collection_name,
+	tkey const &key)
+{
+	std::string path = extra_utility::make_path({"pools", pool_name, schema_name, collection_name, std::to_string(_id)});
+	
+	return throw_if_uninutialized_at_perform()
+			.throw_if_invalid_path(path)
+			.obtain(pool_name)
+			.obtain(schema_name)
+			.obtain(collection_name)
+			.obtain_next(path, key);
 }
 
 db_storage *db_storage::consolidate()
@@ -1738,7 +1863,7 @@ void db_storage::load_collection(
 	std::ifstream data_stream(data_path, std::ios::binary);
     if (!data_stream.is_open())
     {
-        throw std::runtime_error("File error!"); // TODO
+        throw std::ios::failure("Failed to load collection");
     }
 	
 	long file_pos = 0;
@@ -1774,6 +1899,11 @@ void db_storage::load_collection(
 						.load(login, std::move(value), data_path, file_pos);
 		
 		file_pos = data_stream.tellg();
+    }
+	
+	if (data_stream.fail())
+    {
+        throw std::ios::failure("Failed to load collection");
     }
 }
 

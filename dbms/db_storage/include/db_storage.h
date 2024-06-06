@@ -260,8 +260,15 @@ private:
 			bool upper_bound_inclusive,
 			std::string const &path);
 		
-		tvalue obtain_max(
+		std::pair<tkey, tvalue> obtain_min(
 			std::string const &path);
+		
+		std::pair<tkey, tvalue> obtain_max(
+			std::string const &path);
+		
+		std::pair<tkey, tvalue> obtain_next(
+			std::string const &path,
+			tkey const &key);
 		
 		size_t get_records_cnt();
 	
@@ -526,10 +533,21 @@ public:
         bool lower_bound_inclusive,
         bool upper_bound_inclusive);
 	
-	tvalue obtain_max(
+	std::pair<tkey, tvalue> obtain_min(
 		std::string const &pool_name,
 		std::string const &schema_name,
 		std::string const &collection_name);
+		
+	std::pair<tkey, tvalue> obtain_max(
+		std::string const &pool_name,
+		std::string const &schema_name,
+		std::string const &collection_name);
+		
+	std::pair<tkey, tvalue> obtain_next(
+		std::string const &pool_name,
+		std::string const &schema_name,
+		std::string const &collection_name,
+		tkey const &key);
 	
 	db_storage *consolidate();
 

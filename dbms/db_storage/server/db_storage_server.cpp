@@ -21,22 +21,6 @@ void run_terminal_reader();
 
 int main()
 {	
-	logger *logger = nullptr;
-	
-	try
-	{
-		logger = server_logger_builder()
-			.add_file_stream("123", logger::severity::information)
-			->add_console_stream(logger::severity::information)
-			->build();
-	}
-	catch (std::bad_alloc const &)
-	{
-		// todo something
-	}
-	
-	logger->information("I am so alive");
-	
 	pid_t pid = getpid();
 	
 	while (getpid() <= db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR)
@@ -60,11 +44,29 @@ int main()
 	db_storage *db = db_storage::get_instance();
 	bool is_setup = false;
 	
+	logger *logger = nullptr;
+	std::string log_base = "[STRG " + std::to_string(db->get_id()) + ":" + std::to_string(getpid()) + "]";
+	
+	try
+	{
+		logger = server_logger_builder()
+			.add_file_stream("123", logger::severity::information)
+			->add_file_stream("123", logger::severity::error)
+			->add_console_stream(logger::severity::information)
+			->add_console_stream(logger::severity::error)
+			->build();
+	}
+	catch (std::bad_alloc const &)
+	{
+        std::cout << "Critical bad alloc" << std::endl;
+		return 1;
+	}
+	
     mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
     {
         std::cout << "Cannot create the queue. Shut down." << std::endl;
-        return 1;
+        return 2;
     }
     
 	// db->setup(1, db_storage::mode::in_memory_cache);
@@ -96,8 +98,9 @@ int main()
         }
 		
 		std::cout << "read from " << msg.pid << std::endl;
+		std::string log_start = log_base + "[" + std::to_string(msg.pid) + "] ";
 		
-		msg.mtype = 9;
+		msg.mtype = 8;
 		msg.status = db_ipc::command_status::OK;
         
 		switch (msg.cmd)
@@ -113,7 +116,7 @@ int main()
 					db->setup(msg.extra_value, db_storage::mode::in_memory_cache);
 				}
 				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::SET_FILE_SYSTEM_MODE:
@@ -137,9 +140,13 @@ int main()
 					{
 						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
 					}
+					catch (std::ios::failure const &)
+					{
+						msg.status = db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER;
+					}
 				}
 				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::END_SETUP:
@@ -153,8 +160,9 @@ int main()
 			}
 			case db_ipc::command::GET_RECORDS_CNT:
 			{
+				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR;
 				msg.extra_value = db->get_collection_records_cnt(msg.pool_name, msg.schema_name, msg.collection_name);
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD_POOL:
@@ -165,30 +173,42 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to add pool");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to add pool due to invalid name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::too_big_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to add pool due to too big name");
 					msg.status = db_ipc::command_status::TOO_BIG_STRUCT_NAME;
 				}
 				catch (db_storage::insertion_of_existent_struct_attempt_exception const &)
 				{
+                    logger->error(log_start + "Attempt to add pool dublicate");
 					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_POOL_DUBLICATE;
 				}
 				catch (db_storage::insertion_of_struct_failure const &)
 				{
+                    logger->error(log_start + "Failed to add pool");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (std::bad_alloc const &)
 				{
+                    logger->error(log_start + "Failed to add pool due to bad alloc");
 					msg.status = db_ipc::command_status::BAD_ALLOC;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Added pool '" + msg.pool_name + "'");
+				}
+				
+				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD_SCHEMA:
@@ -200,34 +220,42 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to add schema");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to add schema due to invalid name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::too_big_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to add schema due to too big name");
 					msg.status = db_ipc::command_status::TOO_BIG_STRUCT_NAME;
-				}
-				catch (db_storage::invalid_path_exception const &)
-				{
-					msg.status = db_ipc::command_status::INVALID_PATH;
-				}
-				catch (db_storage::insertion_of_existent_struct_attempt_exception const &)
-				{
-					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_SCHEMA_DUBLICATE;
 				}
 				catch (db_storage::insertion_of_struct_failure const &)
 				{
+                    logger->error(log_start + "Failed to add schema");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
+				catch (db_storage::insertion_of_existent_struct_attempt_exception const &)
+				{
+                    logger->error(log_start + "Attempt to add schema dublicate");
+					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_POOL_DUBLICATE;
 				}
 				catch (std::bad_alloc const &)
 				{
+                    logger->error(log_start + "Failed to add schema due to bad alloc");
 					msg.status = db_ipc::command_status::BAD_ALLOC;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Added schema '" + msg.pool_name + '/' + msg.schema_name + "'");
+				}
+				
+				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD_COLLECTION:
@@ -242,41 +270,43 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to add collection");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to add collection due to invalid name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::too_big_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to add collection due to too big name");
 					msg.status = db_ipc::command_status::TOO_BIG_STRUCT_NAME;
-				}
-				catch (db_storage::invalid_path_exception const &)
-				{
-					msg.status = db_ipc::command_status::INVALID_PATH;
-				}
-				catch (db_storage::insertion_of_existent_struct_attempt_exception const &)
-				{
-					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_COLLECTION_DUBLICATE;
 				}
 				catch (db_storage::insertion_of_struct_failure const &)
 				{
+                    logger->error(log_start + "Failed to add collection");
 					msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
+				}
+				catch (db_storage::insertion_of_existent_struct_attempt_exception const &)
+				{
+                    logger->error(log_start + "Attempt to add collection dublicate");
+					msg.status = db_ipc::command_status::ATTEMPT_TO_ADD_POOL_DUBLICATE;
 				}
 				catch (std::bad_alloc const &)
 				{
+                    logger->error(log_start + "Failed to add collection due to bad alloc");
 					msg.status = db_ipc::command_status::BAD_ALLOC;
 				}
 				
 				if (msg.status == db_ipc::command_status::OK)
 				{
-					logger->information("[STRG " + std::to_string(db->get_id()) + ":" +
-							std::to_string(getpid()) + "] " +
-							"Pool added");
+                    logger->information(log_start + "Added collection '" + msg.pool_name + '/' +
+							msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE_POOL:
@@ -287,21 +317,30 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to dispose pool");
 					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to dispose pool due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::disposal_of_nonexistent_struct_attempt_exception)
 				{
+                    logger->error(log_start + "Attempt to dispose non-existent pool");
 					msg.status = db_ipc::command_status::POOL_DOES_NOT_EXIST;
+				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Disposed collection '" + msg.pool_name + "'");
 				}
 				
 				msg.schema_name[0] = '\0';
 				msg.collection_name[0] = '\0';
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE_SCHEMA:
@@ -312,20 +351,29 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to dispose schema");
 					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to dispose schema due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::disposal_of_nonexistent_struct_attempt_exception)
 				{
-					msg.status = db_ipc::command_status::SCHEMA_DOES_NOT_EXIST;
+                    logger->error(log_start + "Attempt to dispose non-existent schema");
+					msg.status = db_ipc::command_status::POOL_DOES_NOT_EXIST;
+				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Disposed schema '" + msg.pool_name + '/' + msg.schema_name + "'");
 				}
 				
 				msg.schema_name[0] = '\0';
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE_COLLECTION:
@@ -336,18 +384,28 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to dispose collection");
 					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_STRUCT;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to dispose collection due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::disposal_of_nonexistent_struct_attempt_exception)
 				{
-					msg.status = db_ipc::command_status::COLLECTION_DOES_NOT_EXIST;
+                    logger->error(log_start + "Attempt to dispose non-existent collection");
+					msg.status = db_ipc::command_status::POOL_DOES_NOT_EXIST;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Disposed collection '" + msg.pool_name + '/' +
+							msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD:
@@ -358,30 +416,42 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to insert key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::FAILED_TO_INSERT_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to insert key '" + msg.login + "' due to invalid struct name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to insert key '" + msg.login + "' due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::insertion_of_existent_key_attempt_exception const &)
 				{
+                    logger->error(log_start + "Attempt to insert existent key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::ATTEMPT_TO_INSERT_EXISTENT_KEY;
 				}
 				catch (std::bad_alloc const &)
 				{
+                    logger->error(log_start + "Failed to insert key '" + msg.login + "' due to bad alloc");
 					msg.status = db_ipc::command_status::BAD_ALLOC;
 				}
 				catch (std::ios::failure const &)
 				{
+                    logger->error(log_start + "Failed to insert key '" + msg.login + "' due to filesystem failure");
 					msg.status = db_ipc::command_status::FAILED_TO_INSERT_KEY;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Added key '" + msg.login + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::UPDATE:
@@ -392,30 +462,42 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to update key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::FAILED_TO_UPDATE_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to update key '" + msg.login + "' due to invalid struct name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to update key '" + msg.login + "' due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::updating_of_nonexistent_key_attempt_exception const &)
 				{
+                    logger->error(log_start + "Attempt to update non-existent key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::ATTEMPT_TO_UPDATE_NONEXISTENT_KEY;
 				}
 				catch (std::bad_alloc const &)
 				{
+                    logger->error(log_start + "Failed to update key '" + msg.login + "' due to bad alloc");
 					msg.status = db_ipc::command_status::BAD_ALLOC;
 				}
 				catch (std::ios::failure const &)
 				{
+                    logger->error(log_start + "Failed to update key '" + msg.login + "' due to filesystem failure");
 					msg.status = db_ipc::command_status::FAILED_TO_UPDATE_KEY;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Updated key '" + msg.login + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE:
@@ -428,26 +510,37 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to dispose key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to dispose key '" + msg.login + "' due to invalid struct name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to dispose key '" + msg.login + "' due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::disposal_of_nonexistent_key_attempt_exception const &)
 				{
+                    logger->error(log_start + "Attempt to dispose non-existent key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::ATTEMPT_TO_DISPOSE_NONEXISTENT_KEY;
 				}
 				catch (std::ios::failure const &)
 				{
-					// TODO
+                    logger->error(log_start + "Failed to dispose key '" + msg.login + "' due to filesystem failure");
+					msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_KEY;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Disposed key '" + msg.login + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::OBTAIN:
@@ -460,30 +553,44 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to obtain key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to obtain key '" + msg.login + "' due to invalid struct name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to obtain key '" + msg.login + "' due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
 				{
+                    logger->error(log_start + "Attempt to obtain non-existent key '" + msg.login + "'");
 					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
 				}
 				catch (std::ios::failure const &)
 				{
+                    logger->error(log_start + "Failed to obtain key '" + msg.login + "' due to filesystem failure");
 					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Obtained key '" + msg.login + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::OBTAIN_BETWEEN:
+			case db_ipc::command::REDISTRIBUTION_OBTAIN:
 			{
+				std::string keys = std::string("('") + msg.login + "','" + msg.right_boundary_login + "')";
+				
 				std::vector<std::pair<tkey, tvalue>> range;
 				try
 				{
@@ -491,56 +598,187 @@ int main()
 				}
 				catch (db_storage::setup_failure const &)
 				{
+                    logger->error(log_start + "Failed to obtain between keys " + keys);
 					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
 				}
 				catch (db_storage::invalid_struct_name_exception const &)
 				{
+                    logger->error(log_start + "Failed to obtain between keys " + keys + " due to invalid struct name");
 					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
 				}
 				catch (db_storage::invalid_path_exception const &)
 				{
+                    logger->error(log_start + "Failed to obtain between keys " + keys + " due to invalid path");
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (std::ios::failure const &)
+				{
+                    logger->error(log_start + "Failed to obtain between keys " + keys + " due to filesystem failure");
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
+				
+				if (msg.cmd == db_ipc::command::REDISTRIBUTION_OBTAIN)
+				{
+					msg.mtype == db_ipc::STORAGE_SERVER_STORAGE_REDISTRIBUTIONAL_OBTAINING_PRIOR;
+				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Obtained between keys " + keys + " in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+				for (int i = 0; i < range.size(); ++i)
+                {
+                    if (i == range.size() - 1)
+                    {
+						sleep(1);
+						msg.mtype = 9;
+                        msg.status = db_ipc::command_status::OBTAIN_BETWEEN_END;
+                    }
+                    strcpy(msg.login, range[i].first.c_str());
+                    msg.hashed_password = range[i].second.hashed_password;
+                    strcpy(msg.name, range[i].second.name.c_str());
+					
+                    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                }
+				
+				break;
+			}
+			case db_ipc::command::OBTAIN_MIN:
+            {
+                try
+                {
+					std::pair<tkey, tvalue> kvp = db->obtain_min(msg.pool_name, msg.schema_name, msg.collection_name);
+					strcpy(msg.login, kvp.first.c_str());
+					msg.hashed_password = kvp.second.hashed_password;
+					strcpy(msg.name, kvp.second.name.c_str());
+                }
+				catch (db_storage::setup_failure const &)
+				{
+                    logger->error(log_start + "Failed to obtain min key");
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
+				catch (db_storage::invalid_struct_name_exception const &)
+				{
+                    logger->error(log_start + "Failed to obtain min key due to invalid struct name");
+					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+                    logger->error(log_start + "Failed to obtain min key due to invalid path");
 					msg.status = db_ipc::command_status::INVALID_PATH;
 				}
 				catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
 				{
+                    logger->error(log_start + "Attempt to obtain non-existent min key");
 					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
 				}
 				catch (std::ios::failure const &)
 				{
+                    logger->error(log_start + "Failed to obtain min key due to filesystem failure");
 					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
 				}
 				
-				// TODO
-				msg.hashed_password = range[0].second.hashed_password;
-				strcpy(msg.name, range[0].second.name.c_str());
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
-				break;
-			}
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Obtained min key '" + msg.login + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+
+                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                break;
+            }
 			case db_ipc::command::OBTAIN_MAX:
             {
                 try
                 {
-					tvalue value = db->obtain_max(msg.pool_name, msg.schema_name, msg.collection_name);
-					msg.hashed_password = value.hashed_password;
-					strcpy(msg.name, value.name.c_str());
+					std::pair<tkey, tvalue> kvp = db->obtain_max(msg.pool_name, msg.schema_name, msg.collection_name);
+					strcpy(msg.login, kvp.first.c_str());
+					msg.hashed_password = kvp.second.hashed_password;
+					strcpy(msg.name, kvp.second.name.c_str());
                 }
-                catch (db_storage::invalid_struct_name_exception const &)
-                {
-                    msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
-                }
-                catch (db_storage::invalid_path_exception const &)
-                {
-                    msg.status = db_ipc::command_status::INVALID_PATH;
-                }
-                catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
-                {
-                    msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
-                }
+				catch (db_storage::setup_failure const &)
+				{
+                    logger->error(log_start + "Failed to obtain max key");
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
+				catch (db_storage::invalid_struct_name_exception const &)
+				{
+                    logger->error(log_start + "Failed to obtain max key due to invalid struct name");
+					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+                    logger->error(log_start + "Failed to obtain max key due to invalid path");
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
+				{
+                    logger->error(log_start + "Attempt to obtain non-existent max key");
+					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
+				}
+				catch (std::ios::failure const &)
+				{
+                    logger->error(log_start + "Failed to obtain max key due to filesystem failure");
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Obtained max key '" + msg.login + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
 
-                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, msg.pid);
+                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
                 break;
             }
-			
+			case db_ipc::command::OBTAIN_NEXT:
+            {
+				std::string prev_key = msg.login;
+				
+                try
+                {
+					std::pair<tkey, tvalue> kvp = db->obtain_next(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
+					strcpy(msg.login, kvp.first.c_str());
+					msg.hashed_password = kvp.second.hashed_password;
+					strcpy(msg.name, kvp.second.name.c_str());
+                }
+				catch (db_storage::setup_failure const &)
+				{
+                    logger->error(log_start + "Failed to obtain next of key '" + msg.login + "'");
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
+				catch (db_storage::invalid_struct_name_exception const &)
+				{
+                    logger->error(log_start + "Failed to obtain next of key '" + msg.login + "' due to invalid struct name");
+					msg.status = db_ipc::command_status::INVALID_STRUCT_NAME;
+				}
+				catch (db_storage::invalid_path_exception const &)
+				{
+                    logger->error(log_start + "Failed to obtain next of key '" + msg.login + "' due to invalid path");
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				catch (db_storage::obtaining_of_nonexistent_key_attempt_exception const &)
+				{
+                    logger->error(log_start + "Attempt to obtain next of non-existent key '" + msg.login + "'");
+					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
+				}
+				catch (std::ios::failure const &)
+				{
+                    logger->error(log_start + "Failed to obtain next of key '" + msg.login + "' due to filesystem failure");
+					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
+				}
+				
+				if (msg.status == db_ipc::command_status::OK)
+				{
+                    logger->information(log_start + "Obtained key '" + msg.login + "' next of key '" + prev_key + "' in collection '" +
+							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
+				}
+				
+                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                break;
+            }
 			default:
 				break;
 		}

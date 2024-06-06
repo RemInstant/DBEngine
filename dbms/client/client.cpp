@@ -546,8 +546,8 @@ void handle_server_answer(
 	
 	do
 	{
-		sleep(counter);
 		rcv = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, getpid(), IPC_NOWAIT);
+		sleep(counter < 5 ? 1 : counter);
 	} while (rcv == -1 && ++counter < 20);
 	
 	if (rcv == -1)

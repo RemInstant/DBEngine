@@ -45,6 +45,7 @@ namespace db_ipc
 		SHUTDOWN,
 		
 		GET_RECORDS_CNT,
+		REDISTRIBUTION_OBTAIN,
 		
 		// data commands
 		
@@ -60,7 +61,9 @@ namespace db_ipc
 		DISPOSE,
 		OBTAIN,
 		OBTAIN_BETWEEN,
+		OBTAIN_MIN,
 		OBTAIN_MAX,
+		OBTAIN_NEXT,
 	};
 	
 	enum class command_status
@@ -145,6 +148,10 @@ namespace db_ipc
 	int constexpr STORAGE_SERVER_MAX_COMMAND_PRIOR = 50;
 	
 	int constexpr STORAGE_SERVER_STORAGE_ADDITION_PRIOR = 31;
+	int constexpr STORAGE_SERVER_STRUCT_ADDITION_PRIOR = 32;
+	int constexpr STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR = 33;
+	int constexpr STORAGE_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR = 40;
+	int constexpr STORAGE_SERVER_STORAGE_REDISTRIBUTIONAL_OBTAINING_PRIOR = 41;
 	
 }
 
