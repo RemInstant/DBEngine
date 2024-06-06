@@ -153,6 +153,8 @@ void db_storage::collection::insert(
 	tvalue const &value,
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tdata *data = nullptr;
 	
 	try
@@ -197,6 +199,8 @@ void db_storage::collection::insert(
 		throw db_storage::insertion_of_existent_key_attempt_exception();
 		// TODO
 	}
+	
+	++_records_cnt;
 }
 
 void db_storage::collection::insert(
@@ -204,6 +208,8 @@ void db_storage::collection::insert(
 	tvalue &&value,
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tdata *data = nullptr;
 	
 	try
@@ -257,6 +263,8 @@ void db_storage::collection::update(
 	tvalue const &value,
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tdata *data = nullptr;
 	
 	try
@@ -301,8 +309,6 @@ void db_storage::collection::update(
 		throw db_storage::updating_of_nonexistent_key_attempt_exception();
 		// TODO
 	}
-	
-	++_records_cnt;
 }
 
 void db_storage::collection::update(
@@ -310,6 +316,8 @@ void db_storage::collection::update(
 	tvalue &&value,
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tdata *data = nullptr;
 	
 	try
@@ -404,6 +412,8 @@ tvalue db_storage::collection::obtain(
 	tkey const &key,
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tdata *data = nullptr;
 	
 	try
@@ -440,6 +450,8 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 	bool upper_bound_inclusive,
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	std::vector<typename associative_container<tkey, tdata *>::key_value_pair> data_vec =
 			_data->obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive);
 	
@@ -471,6 +483,8 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 std::pair<tkey, tvalue> db_storage::collection::obtain_max(
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tkey key;
 	tdata *data = nullptr;
 	
@@ -515,6 +529,8 @@ std::pair<tkey, tvalue> db_storage::collection::obtain_next(
 	std::string const &path,
 		tkey const &key)
 {
+	collect_garbage(path);
+	
 	tkey next_key;
 	tdata *data = nullptr;
 	
@@ -570,6 +586,8 @@ std::pair<tkey, tvalue> db_storage::collection::obtain_next(
 std::pair<tkey, tvalue> db_storage::collection::obtain_min(
 	std::string const &path)
 {
+	collect_garbage(path);
+	
 	tkey key;
 	tdata *data = nullptr;
 	
@@ -790,6 +808,16 @@ void db_storage::collection::move_from(
 	
 	// TODO ALLOCATORS
 };
+
+void db_storage::collection::collect_garbage(
+	std::string const &path)
+{
+	if (_disposed_cnt > 0.35 * _records_cnt)
+	{
+		consolidate(path);
+		_disposed_cnt = 0;
+	}
+}
 
 [[nodiscard]] inline allocator *db_storage::collection::get_allocator() const
 {

@@ -42,11 +42,12 @@ namespace db_ipc
 		SET_FILE_SYSTEM_MODE,
 		END_SETUP, // delete?
 		
+		PING,
 		SHUTDOWN,
 		TERMINATE,
+		TERMINATE_ASSISTANT_THREAD,
 		
 		GET_RECORDS_CNT,
-		REDISTRIBUTION_OBTAIN,
 		
 		// data commands
 		
@@ -70,6 +71,7 @@ namespace db_ipc
 	enum class command_status
 	{
 		CLIENT,
+		SERVER_IS_BUSY,
 		
 		OK,
 		OBTAIN_BETWEEN_END,
@@ -107,9 +109,9 @@ namespace db_ipc
 		FAILED_TO_OBTAIN_KEY,
 	};
 	
-	int constexpr STORAGE_MSG_KEY_SIZE = 64;
-	int constexpr STORAGE_MSG_NAME_SIZE = 64;
-	int constexpr STORAGE_MSG_STRUCTS_NAME_SIZE = 255;
+	int constexpr MSG_KEY_SIZE = 64;
+	int constexpr MSG_NAME_SIZE = 64;
+	int constexpr MSG_STRUCTS_NAME_SIZE = 255;
 
 	struct strg_msg_t
 	{
@@ -117,15 +119,16 @@ namespace db_ipc
 		
 		long mtype;
 		pid_t pid;
+		size_t req_id;
 		command cmd;
 		command_status status;
 		size_t extra_value;
 		
 		// path
 		
-		char pool_name[STORAGE_MSG_STRUCTS_NAME_SIZE];
-		char schema_name[STORAGE_MSG_STRUCTS_NAME_SIZE];
-		char collection_name[STORAGE_MSG_STRUCTS_NAME_SIZE];
+		char pool_name[MSG_STRUCTS_NAME_SIZE];
+		char schema_name[MSG_STRUCTS_NAME_SIZE];
+		char collection_name[MSG_STRUCTS_NAME_SIZE];
 		
 		// data
 		
@@ -134,27 +137,28 @@ namespace db_ipc
 		allocator_fit_mode alloc_fit_mode;
 		size_t t_for_b_trees;
 		
-		char login[STORAGE_MSG_KEY_SIZE];
-		char right_boundary_login[STORAGE_MSG_KEY_SIZE];
+		char login[MSG_KEY_SIZE];
+		char right_boundary_login[MSG_KEY_SIZE];
 		int64_t hashed_password;
-		char name[STORAGE_MSG_NAME_SIZE];
+		char name[MSG_NAME_SIZE];
 	};
 	
 	
 
-	int constexpr STORAGE_SERVER_MQ_KEY = 50;
-	int constexpr STORAGE_SERVER_MSG_SIZE = sizeof(strg_msg_t) - sizeof(long);
+	int constexpr MANAGER_SERVER_MQ_KEY = 50;
+	int constexpr MANAGER_SERVER_MSG_SIZE = sizeof(strg_msg_t) - sizeof(long);
 	
-	int constexpr STORAGE_SERVER_MAX_COMMON_PRIOR = 30;
-	int constexpr STORAGE_SERVER_MAX_COMMAND_PRIOR = 50;
+	int constexpr MANAGER_SERVER_MAX_COMMON_PRIOR = 30;
+	int constexpr MANAGER_SERVER_MAX_COMMAND_PRIOR = 50;
 	
 	
-	int constexpr STORAGE_SERVER_STORAGE_ANSWER_PRIOR = 8;
-	int constexpr STORAGE_SERVER_STORAGE_ADDITION_PRIOR = 31;
-	int constexpr STORAGE_SERVER_STRUCT_ADDITION_PRIOR = 32;
-	int constexpr STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR = 33;
-	int constexpr STORAGE_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR = 40;
-	int constexpr STORAGE_SERVER_STORAGE_REDISTRIBUTIONAL_OBTAINING_PRIOR = 41;
+	int constexpr MANAGER_SERVER_STORAGE_ANSWER_PRIOR = 8;
+	int constexpr MANAGER_SERVER_CLIENT_PRIOR = 10;
+	int constexpr MANAGER_SERVER_CLIENT_PING_PRIOR = 11;
+	int constexpr MANAGER_SERVER_STORAGE_ADDITION_PRIOR = 31;
+	int constexpr MANAGER_SERVER_STRUCT_ADDITION_PRIOR = 32;
+	int constexpr MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR = 33;
+	int constexpr MANAGER_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR = 40;
 	
 }
 

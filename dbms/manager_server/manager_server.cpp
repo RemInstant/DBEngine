@@ -75,6 +75,8 @@ void load_separators(
 void run_terminal_reader(
     std::vector<pid_t> *strg_servers);
 
+void run_assistant_reader();
+
 pid_t run_storage_server(
     size_t strg_server_id);
 
@@ -115,12 +117,19 @@ void handle_data_command(
     std::map<db_path, std::vector<std::string>> const &separators,
     db_ipc::strg_msg_t &msg);
 
+void handle_obtain_between_command(
+    std::vector<pid_t> const &strg_servers,
+    std::map<db_path, std::vector<std::string>> const &separators,
+    db_ipc::strg_msg_t &msg);
+
+
+
 int main()
 {
-    msgctl(msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666), IPC_RMID, nullptr);
+    msgctl(msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666), IPC_RMID, nullptr);
     
     bool is_filesystem = true;
-    // std::set<std::pair<std::string, std::set<std::pair<std::string, std::set<std::string>>>>> structure;
+    size_t data_change_counter = 0;
     
     db_ipc::strg_msg_t msg;
     size_t initial_strg_servers_cnt;
@@ -149,7 +158,7 @@ int main()
     
     std::thread cmd_thread(run_terminal_reader, &strg_servers);
     
-    mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, IPC_CREAT | 0666);
+    mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, IPC_CREAT | 0666);
     if (mq_descriptor == -1)
     {
         std::cout << "Cannot create the queue. Shut down." << std::endl;
@@ -159,7 +168,7 @@ int main()
     int rcv = -1;
     do
     {
-        rcv = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0, IPC_NOWAIT);
+        rcv = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0, IPC_NOWAIT);
     } while (rcv != -1);
     
     msg.mtype = 1;
@@ -167,12 +176,12 @@ int main()
     for (size_t i = 0; i < initial_strg_servers_cnt; ++i)
     {
         msg.extra_value = i;
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
     }
     
     while (run_flag)
     {
-        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, -db_ipc::STORAGE_SERVER_MAX_COMMON_PRIOR, MSG_NOERROR);
+        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, -db_ipc::MANAGER_SERVER_MAX_COMMON_PRIOR, MSG_NOERROR);
         
         if (rcv_cnt == -1)
         {
@@ -186,6 +195,11 @@ int main()
         
         switch (msg.cmd)
         {
+            case db_ipc::command::PING:
+            {
+                msg.mtype = msg.pid;
+                msg.status = db_ipc::command_status::OK;
+            }
             case db_ipc::command::SHUTDOWN:
 			{
                 try
@@ -252,15 +266,31 @@ int main()
             case db_ipc::command::ADD:
             case db_ipc::command::UPDATE:
             case db_ipc::command::DISPOSE:
+            {
+                ++data_change_counter;
+                handle_data_command(strg_servers, separators, msg);
+                break;
+            }
             case db_ipc::command::OBTAIN:
-            case db_ipc::command::OBTAIN_BETWEEN:
+            case db_ipc::command::OBTAIN_MIN:
             case db_ipc::command::OBTAIN_MAX:
+            case db_ipc::command::OBTAIN_NEXT:
             {
                 handle_data_command(strg_servers, separators, msg);
                 break;
             }
+            case db_ipc::command::OBTAIN_BETWEEN:
+            {
+                handle_obtain_between_command(strg_servers, separators, msg);
+            }
             default:
                 break;
+        }
+        
+        if (data_change_counter >= 30 * (1 + strg_servers.size()))
+        {
+            redistribute_keys(strg_servers, separators);
+            data_change_counter = 0;
         }
     }
     
@@ -339,7 +369,7 @@ void load_separators(
                 if (access(collection_cfg_path.c_str(), F_OK) == -1) continue;
                 
                 separators[db_path(pool_name, schema_name, collection_name)] =
-                        std::vector<std::string>(strg_servers_cnt - 1, std::string(db_ipc::STORAGE_MSG_KEY_SIZE, 127));
+                        std::vector<std::string>(strg_servers_cnt - 1, std::string(db_ipc::MSG_KEY_SIZE, 127));
                 
                 for (auto const &table_entry : std::filesystem::directory_iterator(extra_utility::make_path({"pools", pool_name, schema_name, collection_name})))
                 {
@@ -402,13 +432,13 @@ void run_terminal_reader(
             for (auto iter = strg_servers->begin(); iter != strg_servers->end(); ++iter)
             {
                 msg.mtype = *iter;
-                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
             }
             
             while(wait(NULL) > 0);
             
             msg.mtype = 1;
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
             
             break;
         }
@@ -417,16 +447,43 @@ void run_terminal_reader(
             msg.cmd = db_ipc::command::ADD_STORAGE_SERVER;
             msg.mtype = 4;
             
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
         }
         else if (cmd == "terminate")
         {
             msg.cmd = db_ipc::command::TERMINATE_STORAGE_SERVER;
             msg.mtype = 4;
             
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
         }
     }
+}
+
+void run_assistant_reader()
+{
+    db_ipc::strg_msg_t msg;
+    
+    std::cout << "Assistant started" << std::endl;
+    
+    while (true)
+    {
+        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, db_ipc::MANAGER_SERVER_CLIENT_PING_PRIOR, MSG_NOERROR);
+        
+        if (msg.cmd == db_ipc::command::TERMINATE_ASSISTANT_THREAD)
+        {
+            break;
+        }
+        
+        
+        std::cout << "Assistant send" << std::endl;
+        
+        msg.status = db_ipc::command_status::SERVER_IS_BUSY;
+        msg.mtype = msg.pid;
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    }
+    
+    
+    std::cout << "Assistant end" << std::endl;
 }
 
 #pragma region ipc utility
@@ -444,7 +501,7 @@ int msgrcvt(
     do
     {
         rcv = msgrcv(descriptor, &msg, msg_size, mtypes, flags | IPC_NOWAIT);
-        usleep(counter < 5 ? 100 : counter * 200);
+        usleep(counter < 5 ? 150 : counter * 200);
     } while (++counter < max_counter && rcv == -1);
     
     return rcv;
@@ -468,9 +525,9 @@ int transfer_left(
     msg.status = db_ipc::command_status::OK;
     msg.cmd = db_ipc::command::OBTAIN_MIN;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    ssize_t rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    ssize_t rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK) return -1;
     
@@ -479,9 +536,9 @@ int transfer_left(
     msg.status = db_ipc::command_status::OK;
     msg.cmd = db_ipc::command::OBTAIN_NEXT;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (msg.status == db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY)
     {
@@ -496,9 +553,9 @@ int transfer_left(
     msg.mtype = strg_servers.at(id - 1);
     msg.cmd = db_ipc::command::ADD;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK) return -1;
     
@@ -506,9 +563,9 @@ int transfer_left(
     msg.mtype = strg_servers.at(id);
     msg.cmd = db_ipc::command::DISPOSE;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    rcv = msgrcvt(25, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    rcv = msgrcvt(25, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK)
     {
@@ -527,7 +584,6 @@ int transfer_right(
     int id)
 {
     std::string new_separator;
-    
     db_ipc::strg_msg_t msg;
     msg.pid = getpid();
     strcpy(msg.pool_name, path.pool.c_str());
@@ -539,9 +595,9 @@ int transfer_right(
     msg.status = db_ipc::command_status::OK;
     msg.cmd = db_ipc::command::OBTAIN_MAX;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    ssize_t rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    ssize_t rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK) return -1;
     
@@ -551,9 +607,9 @@ int transfer_right(
     msg.mtype = strg_servers.at(id + 1);
     msg.cmd = db_ipc::command::ADD;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK) return -1;
     
@@ -561,9 +617,9 @@ int transfer_right(
     msg.mtype = strg_servers.at(id);
     msg.cmd = db_ipc::command::DISPOSE;
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-            db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    rcv = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+            db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR);
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK)
     {
@@ -630,9 +686,9 @@ void handle_add_server_command(
     msg.extra_value = id;
     msg.pid = getpid();
     
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
-    ssize_t rcv_cnt = msgrcvt(10, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE,
-                                    db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    ssize_t rcv_cnt = msgrcvt(10, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE,
+                                    db_ipc::MANAGER_SERVER_STORAGE_ADDITION_PRIOR);
     
     if (rcv_cnt == -1 || msg.status == db_ipc::command_status::FAILED_TO_SETUP_STORAGE_SERVER)
     {
@@ -647,7 +703,7 @@ void handle_add_server_command(
     {
         for (auto &pair : separators)
         {
-            pair.second.push_back(std::string(db_ipc::STORAGE_MSG_KEY_SIZE, 127));
+            pair.second.push_back(std::string(db_ipc::MSG_KEY_SIZE, 127));
         }
         
         redistribute_keys(strg_servers, separators);
@@ -676,10 +732,10 @@ void handle_terminate_server_command(
         strcpy(msg.collection_name, path.collection.c_str());
         
         msg.mtype = strg_servers.at(id);
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
         
-        ssize_t rcv = msgrcvt(25, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-                                db_ipc::STORAGE_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR);
+        ssize_t rcv = msgrcvt(25, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+                                db_ipc::MANAGER_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR);
             
         if (rcv == -1)
         {
@@ -694,7 +750,7 @@ void handle_terminate_server_command(
     
     msg.mtype = strg_servers[id];
     msg.cmd = db_ipc::command::TERMINATE;
-    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
     
     strg_servers.erase(strg_servers.begin() + id);
     
@@ -723,7 +779,7 @@ pid_t run_storage_server(
         return -1;
     }
     
-    sleep(1);
+    usleep(200);
     
     if (waitpid(pid, NULL, WNOHANG) == 0)
     {
@@ -745,7 +801,7 @@ size_t get_id_for_key(
     
     if (separators.empty())
     {
-        return 1;
+        return 0;
     }
     
     auto const &vector = separators.at(path);
@@ -781,10 +837,10 @@ int redistribute_path_keys(
     for (size_t i = 0; i < sz; ++i)
     {
         msg.mtype = strg_servers.at(i);
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
         
-        ssize_t rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 
-                                    db_ipc::STORAGE_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR);
+        ssize_t rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 
+                                    db_ipc::MANAGER_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR);
         
         if (rcv == -1)
         {
@@ -795,6 +851,10 @@ int redistribute_path_keys(
         sum += cnts[i];
     }
     
+    if (sum < sz)
+    {
+        return 0;
+    }
     // if (sum < 2 * sz)
     // {
     //     return 0;
@@ -861,6 +921,8 @@ int redistribute_keys(
 {
     int main_res = 0;
     
+    // std::thread assistant_thread(run_assistant_reader);
+    
     for (auto &pair : separators)
     {
         int res = redistribute_path_keys(strg_servers, separators, pair.first);
@@ -870,6 +932,13 @@ int redistribute_keys(
         }
         main_res |= res;
     }
+    
+    db_ipc::strg_msg_t msg;
+    msg.mtype = db_ipc::MANAGER_SERVER_CLIENT_PING_PRIOR;
+    msg.cmd = db_ipc::command::TERMINATE_ASSISTANT_THREAD;
+    
+    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    // assistant_thread.join();
     
     return main_res;
 }
@@ -883,17 +952,17 @@ void handle_add_struct_command(
     {
         msg.mtype = msg.pid;
         msg.status = db_ipc::command_status::FAILED_TO_ADD_STRUCT;
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
     }
     else
     {
         for (size_t i = 0; i < strg_servers.size(); ++i)
         {
             msg.mtype = strg_servers.at(i);
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
             
-            ssize_t rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE,
-                    db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR);
+            ssize_t rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE,
+                    db_ipc::MANAGER_SERVER_STRUCT_ADDITION_PRIOR);
             
             if (rcv == -1 || msg.status != db_ipc::command_status::OK)
             {
@@ -912,10 +981,10 @@ void handle_add_struct_command(
                     msg.status = db_ipc::command_status::OK;
                     msg.mtype = strg_servers.at(j - 1);
                     
-                    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+                    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
                     
-                    rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE,
-                            db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR);
+                    rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE,
+                            db_ipc::MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR);
                     
                     if (rcv == -1 || msg.status != db_ipc::command_status::OK)
                     {
@@ -927,17 +996,17 @@ void handle_add_struct_command(
                 msg.mtype = msg.pid;
                 msg.cmd = old_cmd;
                 msg.status = old_status;
-                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+                msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
                 return;
             }
         }
         
         separators[db_path(msg.pool_name, msg.schema_name, msg.collection_name)] =
-                std::vector<std::string>(strg_servers.size() - 1, std::string(db_ipc::STORAGE_MSG_KEY_SIZE, 127));
+                std::vector<std::string>(strg_servers.size() - 1, std::string(db_ipc::MSG_KEY_SIZE, 127));
         
         msg.mtype = msg.pid;
         msg.status = db_ipc::command_status::OK;
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
     }
 }
 
@@ -950,17 +1019,17 @@ void handle_dispose_struct_command(
     {
         msg.mtype = msg.pid;
         msg.status = db_ipc::command_status::FAILED_TO_DISPOSE_KEY;
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
     }
     else
     {
         for (size_t i = 0; i < strg_servers.size(); ++i)
         {
             msg.mtype = strg_servers.at(i);
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
             
-            ssize_t rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::STORAGE_SERVER_MSG_SIZE,
-                    db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR);
+            ssize_t rcv = msgrcvt(20, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE,
+                    db_ipc::MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR);
             
             if (rcv == -1 || msg.status != db_ipc::command_status::OK)
             {
@@ -973,7 +1042,7 @@ void handle_dispose_struct_command(
         
         msg.mtype = msg.pid;
         msg.status = db_ipc::command_status::OK;
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
         return;
     }
 }
@@ -989,18 +1058,52 @@ void handle_data_command(
         {
             msg.mtype = msg.pid;
             msg.status = db_ipc::command_status::FAILED_TO_PERFORM_DATA_COMMAND;
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
         }
         else
         {
             size_t id = get_id_for_key(separators, db_path(msg.pool_name, msg.schema_name, msg.collection_name), msg.login);
             msg.mtype = strg_servers.at(id);
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
         }
     }
     else
     {
         msg.mtype = msg.pid;
-        msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, MSG_NOERROR);
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+    }
+}
+
+void handle_obtain_between_command(
+    std::vector<pid_t> const &strg_servers,
+    std::map<db_path, std::vector<std::string>> const &separators,
+    db_ipc::strg_msg_t &msg)
+{
+    if (msg.status == db_ipc::command_status::CLIENT)
+    {
+        if (strg_servers.empty())
+        {
+            msg.mtype = msg.pid;
+            msg.status = db_ipc::command_status::FAILED_TO_PERFORM_DATA_COMMAND;
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+        }
+        else
+        {
+            size_t left_id = get_id_for_key(separators, db_path(msg.pool_name, msg.schema_name, msg.collection_name), msg.login);
+            size_t right_id = get_id_for_key(separators, db_path(msg.pool_name, msg.schema_name, msg.collection_name), msg.right_boundary_login);
+            
+            msg.extra_value = right_id - left_id + 1;
+            
+            for (size_t id = left_id; id <= right_id; ++id)
+            {
+                msg.mtype = strg_servers.at(id);
+                msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+            }
+        }
+    }
+    else
+    {
+        msg.mtype = msg.pid;
+        msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
     }
 }

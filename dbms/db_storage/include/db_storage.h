@@ -292,6 +292,11 @@ private:
 		
 		void move_from(
 			collection &&other);
+			
+	private:
+	
+		void collect_garbage(
+			std::string const &path);
 	
 	private:
 	

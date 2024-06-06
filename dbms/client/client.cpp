@@ -16,10 +16,19 @@ struct tvalue
 	std::string name;
 };
 
+int msgrcvt(
+    int max_counter,
+    int descriptor,
+    db_ipc::strg_msg_t &msg,
+    size_t msg_size,
+    long mtypes,
+    int flags = 0);
+
 void run_session(
 	int mq_descriptor,
     std::istream &stream,
-	bool is_terminal);
+	bool is_terminal,
+	size_t &request_counter);
 
 int main()
 {
@@ -27,7 +36,7 @@ int main()
 	
 	pid_t pid = getpid();
 	
-	while (getpid() <= db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR)
+	while (getpid() <= db_ipc::MANAGER_SERVER_MAX_COMMAND_PRIOR)
 	{
 		switch (pid = fork())
 		{
@@ -42,7 +51,8 @@ int main()
 		}
 	}
 	
-	int mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666);
+	int mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
+	size_t request_counter = 1;
 	
 	if (mq_descriptor == -1)
 	{
@@ -54,12 +64,12 @@ int main()
 	do
 	{
 		db_ipc::strg_msg_t msg;
-		rcv = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, getpid(), IPC_NOWAIT);
+		rcv = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, getpid(), IPC_NOWAIT);
 	} while (rcv != -1);
 	
 	try
 	{
-		run_session(mq_descriptor, std::cin, true);
+		run_session(mq_descriptor, std::cin, true, request_counter);
 	}
 	catch (std::runtime_error const &ex)
 	{
@@ -169,7 +179,7 @@ std::string read_struct_name(
     {
 		throw std::runtime_error("Expected struct name");
     }
-	if (name.size() > 255)
+	if (name.size() > db_ipc::MSG_STRUCTS_NAME_SIZE)
     {
 		throw std::runtime_error("Invalid struct name");
     }
@@ -205,7 +215,8 @@ void validate_eof(
 
 void handle_add_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
@@ -214,9 +225,7 @@ void handle_add_command(
 	tvalue value = read_value(args);
 	validate_eof(args);
 	
-	db_ipc::strg_msg_t msg;
-	
-	msg.mtype = 10;
+	msg.mtype = db_ipc::MANAGER_SERVER_CLIENT_PRIOR;
 	msg.pid = getpid();
 	msg.cmd = db_ipc::command::ADD;
 	msg.status = db_ipc::command_status::CLIENT;
@@ -229,7 +238,7 @@ void handle_add_command(
 	msg.hashed_password = value.hashed_passwod;
 	strcpy(msg.name, value.name.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -238,7 +247,8 @@ void handle_add_command(
 
 void handle_update_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
@@ -246,8 +256,6 @@ void handle_update_command(
 	std::string key = read_key(args);
 	tvalue value = read_value(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -262,7 +270,7 @@ void handle_update_command(
 	msg.hashed_password = value.hashed_passwod;
 	strcpy(msg.name, value.name.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -271,15 +279,14 @@ void handle_update_command(
 
 void handle_dispose_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
 	std::string collection_name = read_struct_name(args);
 	std::string key = read_key(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -292,7 +299,7 @@ void handle_dispose_command(
 	
 	strcpy(msg.login, key.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -301,7 +308,8 @@ void handle_dispose_command(
 
 void handle_obtain_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
@@ -310,8 +318,6 @@ void handle_obtain_command(
 	std::string key2 = "";
 	if (!args.eof()) key2 = read_key(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -328,8 +334,9 @@ void handle_obtain_command(
 	strcpy(msg.collection_name, collection_name.c_str());
 	
 	strcpy(msg.login, key1.c_str());
+	strcpy(msg.right_boundary_login, key2.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -338,13 +345,12 @@ void handle_obtain_command(
 
 void handle_add_pool_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	size_t t = read_parameter_t_for_b_trees(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -356,7 +362,7 @@ void handle_add_pool_command(
 	msg.tree_variant = db_ipc::search_tree_variant::B;
 	msg.t_for_b_trees = t;
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -365,14 +371,13 @@ void handle_add_pool_command(
 
 void handle_add_schema_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
 	size_t t = read_parameter_t_for_b_trees(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -385,7 +390,7 @@ void handle_add_schema_command(
 	msg.tree_variant = db_ipc::search_tree_variant::B;
 	msg.t_for_b_trees = t;
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -394,7 +399,8 @@ void handle_add_schema_command(
 
 void handle_add_collection_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
@@ -403,8 +409,6 @@ void handle_add_collection_command(
 	db_ipc::allocator_variant alloc_variant = read_allocator(args);
 	db_ipc::allocator_fit_mode alloc_fit_mode = read_allocator_fit_mode(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -420,7 +424,7 @@ void handle_add_collection_command(
 	msg.alloc_variant = alloc_variant;
 	msg.alloc_fit_mode = alloc_fit_mode;
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -429,12 +433,11 @@ void handle_add_collection_command(
 
 void handle_dispose_pool_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -443,7 +446,7 @@ void handle_dispose_pool_command(
 	
 	strcpy(msg.pool_name, pool_name.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -452,13 +455,12 @@ void handle_dispose_pool_command(
 
 void handle_dispose_schema_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -468,7 +470,7 @@ void handle_dispose_schema_command(
 	strcpy(msg.pool_name, pool_name.c_str());
 	strcpy(msg.schema_name, schema_name.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -477,14 +479,13 @@ void handle_dispose_schema_command(
 
 void handle_dispose_collection_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	db_ipc::strg_msg_t &msg)
 {
 	std::string pool_name = read_struct_name(args);
 	std::string schema_name = read_struct_name(args);
 	std::string collection_name = read_struct_name(args);
 	validate_eof(args);
-	
-	db_ipc::strg_msg_t msg;
 	
 	msg.mtype = 10;
 	msg.pid = getpid();
@@ -495,7 +496,7 @@ void handle_dispose_collection_command(
 	strcpy(msg.schema_name, schema_name.c_str());
 	strcpy(msg.collection_name, collection_name.c_str());
 	
-	int snd = msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 	if (snd == -1)
 	{
 		throw std::runtime_error("Failed to send command to the server");
@@ -504,7 +505,8 @@ void handle_dispose_collection_command(
 
 void handle_execute_file_command(
 	int mq_descriptor,
-	std::istringstream &args)
+	std::istringstream &args,
+	size_t &request_counter)
 {
 	std::string path;
 	
@@ -518,7 +520,7 @@ void handle_execute_file_command(
 		throw std::runtime_error("Cannot open the command file");
 	}
 	
-	run_session(mq_descriptor, fstream, false);
+	run_session(mq_descriptor, fstream, false, request_counter);
 }
 
 void handle_reconnect_command(
@@ -527,7 +529,7 @@ void handle_reconnect_command(
 {
 	validate_eof(args);
 	
-	mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666);
+	mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
 	
 	if (mq_descriptor == -1)
 	{
@@ -538,22 +540,31 @@ void handle_reconnect_command(
 }
 
 void handle_server_answer(
-	int mq_descriptor)
+	int mq_descriptor,
+	db_ipc::strg_msg_t &msg,
+	size_t request_counter)
 {
-	int counter = 0;
+	char login[db_ipc::MSG_KEY_SIZE];
+	strcpy(login, msg.login);
+	
 	int rcv = -1;
-	db_ipc::strg_msg_t msg;
+	msg.req_id = 0;
 	
-	do
+	while (request_counter != msg.req_id)
 	{
-		rcv = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, getpid(), IPC_NOWAIT);
-		sleep(counter < 5 ? 1 : counter);
-	} while (rcv == -1 && ++counter < 20);
-	
-	if (rcv == -1)
-	{
-		throw std::runtime_error("Cannot receive server answer");
+		rcv = msgrcvt(60, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, getpid());
+		
+		if (msg.cmd == db_ipc::command::PING)
+		{
+			rcv = -1;
+		}
+		if (rcv == -1)
+		{
+			throw std::runtime_error("Cannot receive server answer");
+		}
 	}
+	
+	
 	
 	switch (msg.status)
 	{
@@ -588,7 +599,13 @@ void handle_server_answer(
 		case db_ipc::command_status::ATTEMPT_TO_DISPOSE_NONEXISTENT_KEY:
 			throw std::runtime_error("Entered key does not exist");
 		case db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY:
-			throw std::runtime_error("Entered key does not exist");
+			switch (msg.cmd)
+			{
+				case db_ipc::command::OBTAIN_BETWEEN:
+					throw std::runtime_error("Entered keys do not exist");
+				default:
+					throw std::runtime_error("Entered key does not exist");
+			}
 		case db_ipc::command_status::FAILED_TO_ADD_STRUCT:
 			switch (msg.cmd)
 			{
@@ -652,7 +669,28 @@ void handle_server_answer(
 			std::cout << "Obtained record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
 			break;
 		case db_ipc::command::OBTAIN_BETWEEN:
-			// TODO
+			{
+				size_t counter = msg.status == db_ipc::command_status::OBTAIN_BETWEEN_END ? 1 : 0;
+				size_t target = msg.extra_value;
+				
+				std::cout << "Between " << login << " and " << msg.right_boundary_login << std::endl <<
+					"Obtained record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+				
+				while(counter != target)
+				{
+					rcv = msgrcvt(25, mq_descriptor, msg, db_ipc::MANAGER_SERVER_MSG_SIZE, getpid());
+					
+					if (rcv == -1)
+					{
+						throw std::runtime_error("Cannot receive server answer");
+					}
+					
+					std::cout << "Obtained record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+					
+					if (msg.status == db_ipc::command_status::OBTAIN_BETWEEN_END) ++counter;
+				
+				} while (counter != target);
+			}
 			break;
 		case db_ipc::command::ADD_POOL:
 			std::cout << "Added pool '" << msg.pool_name << "'" << std::endl;
@@ -679,10 +717,64 @@ void handle_server_answer(
 	std::cout << std::endl;
 }
 
+int msgrcvt(
+    int max_counter,
+    int descriptor,
+    db_ipc::strg_msg_t &msg,
+    size_t msg_size,
+    long mtypes,
+    int flags)
+{
+    ssize_t rcv = -1;
+    int counter = 0;
+    do
+    {
+        rcv = msgrcv(descriptor, &msg, msg_size, mtypes, flags | IPC_NOWAIT);
+		
+		if (counter < 3)
+		{
+			usleep(250);
+		}
+		else
+		{
+			sleep(2);
+		}
+		
+		// if (rcv == -1)
+		// {
+		// 	if (counter < 5)
+		// 	{
+		// 		usleep(250);
+		// 	}
+		// 	else
+		// 	{
+		// 		msg.cmd = db_ipc::command::PING;
+		// 		msgsnd(descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
+		// 	}
+		// }
+		// else if (msg.cmd == db_ipc::command::PING)
+		// {
+		// 	if (msg.status == db_ipc::command_status::SERVER_IS_BUSY)
+		// 	{
+		// 		std::cout << "Server is busy. Please, wait" << std::endl;
+		// 		sleep(10);
+		// 		counter = 0;
+		// 	}
+			
+		// 	rcv = -1;
+		// 	msg.status = db_ipc::command_status::OK;	
+		// }
+		
+    } while (++counter < max_counter && rcv == -1);
+    
+    return rcv;
+}
+
 void run_session(
 	int mq_descriptor,
     std::istream &stream,
-	bool is_terminal)
+	bool is_terminal,
+	size_t &request_counter)
 {
     std::string buf;
     std::string cmd;
@@ -692,9 +784,18 @@ void run_session(
 
     std::string key;
     tvalue value;
+	
+	db_ipc::strg_msg_t msg;
 
     while(std::getline(stream, buf))
     {
+		if (buf[0] == '\0')
+		{
+			continue;
+		}
+		
+		msg.req_id = request_counter;
+		
         std::istringstream line(buf);
         line >> cmd;
 
@@ -707,47 +808,49 @@ void run_session(
 			}
 			else if (cmd == "add")
 			{
-				handle_add_command(mq_descriptor, line);
+				handle_add_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "update")
 			{
-				handle_update_command(mq_descriptor, line);
+				handle_update_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "dispose")
 			{
-				handle_dispose_command(mq_descriptor, line);
+				handle_dispose_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "obtain")
 			{
-				handle_obtain_command(mq_descriptor, line);
+				handle_obtain_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "addPool")
 			{
-				handle_add_pool_command(mq_descriptor, line);
+				handle_add_pool_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "addSchema")
 			{
-				handle_add_schema_command(mq_descriptor, line);
+				handle_add_schema_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "addCollection")
 			{
-				handle_add_collection_command(mq_descriptor, line);
+				handle_add_collection_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "disposePool")
 			{
-				handle_dispose_pool_command(mq_descriptor, line);
+				handle_dispose_pool_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "disposeSchema")
 			{
-				handle_dispose_schema_command(mq_descriptor, line);
+				handle_dispose_schema_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "disposeCollection")
 			{
-				handle_dispose_collection_command(mq_descriptor, line);
+				handle_dispose_collection_command(mq_descriptor, line, msg);
 			}
 			else if (cmd == "executeFile")
 			{
-				handle_execute_file_command(mq_descriptor, line);
+				handle_execute_file_command(mq_descriptor, line, request_counter);
+				request_counter = request_counter % static_cast<size_t>(1e9) + 1;
+				continue;
 			}
 			else if (cmd == "reconnect")
 			{
@@ -759,7 +862,8 @@ void run_session(
 				throw std::runtime_error("Invalid command");
 			}
 			
-			handle_server_answer(mq_descriptor);
+			handle_server_answer(mq_descriptor, msg, request_counter);
+			request_counter = request_counter % static_cast<size_t>(1e9) + 1;
 		}
 		catch (std::runtime_error const &ex)
 		{

@@ -24,7 +24,7 @@ int main(int argc, char** argv)
 {	
 	pid_t pid = getpid();
 	
-	while (getpid() <= db_ipc::STORAGE_SERVER_MAX_COMMAND_PRIOR)
+	while (getpid() <= db_ipc::MANAGER_SERVER_MAX_COMMAND_PRIOR)
 	{
 		switch (pid = fork())
 		{
@@ -69,7 +69,7 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	
-    mq_descriptor = msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666);
+    mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
     {
         std::cout << "Cannot open the message queue. Shutdown." << std::endl;
@@ -81,7 +81,7 @@ int main(int argc, char** argv)
 	
     while (run_flag)
     {
-        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, pid, MSG_NOERROR);
+        ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, pid, MSG_NOERROR);
         if (rcv_cnt == -1)
         {
 			logger->error(log_base + "[-----] An error occurred while receiving the message. Shutdown");
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
 		
 		std::string log_start = log_base + "[" + pid_str + "] ";
 		
-		msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ANSWER_PRIOR;
+		msg.mtype = db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR;
 		msg.status = db_ipc::command_status::OK;
         
 		switch (msg.cmd)
@@ -111,8 +111,8 @@ int main(int argc, char** argv)
 					db->setup(msg.extra_value, db_storage::mode::in_memory_cache);
 					logger->information(log_start + "Server is setup with 'in memory cache' mode");
 				}
-				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STORAGE_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::SET_FILE_SYSTEM_MODE:
@@ -151,8 +151,8 @@ int main(int argc, char** argv)
 					logger->information(log_start + "Server is setup with 'file_system' mode");
 				}
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STORAGE_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::END_SETUP:
@@ -174,9 +174,9 @@ int main(int argc, char** argv)
 			}
 			case db_ipc::command::GET_RECORDS_CNT:
 			{
-				msg.mtype = db_ipc::STORAGE_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR;
+				msg.mtype = db_ipc::MANAGER_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR;
 				msg.extra_value = db->get_collection_records_cnt(msg.pool_name, msg.schema_name, msg.collection_name);
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD_POOL:
@@ -221,8 +221,8 @@ int main(int argc, char** argv)
                     logger->information(log_start + "Added pool '" + msg.pool_name + "'");
 				}
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STRUCT_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD_SCHEMA:
@@ -268,8 +268,8 @@ int main(int argc, char** argv)
                     logger->information(log_start + "Added schema '" + msg.pool_name + '/' + msg.schema_name + "'");
 				}
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STRUCT_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD_COLLECTION:
@@ -319,8 +319,8 @@ int main(int argc, char** argv)
 							msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_ADDITION_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STRUCT_ADDITION_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE_POOL:
@@ -353,8 +353,8 @@ int main(int argc, char** argv)
 				msg.schema_name[0] = '\0';
 				msg.collection_name[0] = '\0';
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE_SCHEMA:
@@ -386,8 +386,8 @@ int main(int argc, char** argv)
 				
 				msg.schema_name[0] = '\0';
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE_COLLECTION:
@@ -418,8 +418,8 @@ int main(int argc, char** argv)
 							msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msg.mtype = db_ipc::STORAGE_SERVER_STRUCT_DISPOSAL_PRIOR;
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msg.mtype = db_ipc::MANAGER_SERVER_STRUCT_DISPOSAL_PRIOR;
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::ADD:
@@ -465,7 +465,7 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::UPDATE:
@@ -511,7 +511,7 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::DISPOSE:
@@ -554,7 +554,7 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::OBTAIN:
@@ -597,11 +597,10 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-				msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}
 			case db_ipc::command::OBTAIN_BETWEEN:
-			case db_ipc::command::REDISTRIBUTION_OBTAIN:
 			{
 				std::string keys = std::string("('") + msg.login + "','" + msg.right_boundary_login + "')";
 				
@@ -631,22 +630,22 @@ int main(int argc, char** argv)
 					msg.status = db_ipc::command_status::FAILED_TO_OBTAIN_KEY;
 				}
 				
-				if (msg.cmd == db_ipc::command::REDISTRIBUTION_OBTAIN)
-				{
-					msg.mtype == db_ipc::STORAGE_SERVER_STORAGE_REDISTRIBUTIONAL_OBTAINING_PRIOR;
-				}
-				
 				if (msg.status == db_ipc::command_status::OK)
 				{
                     logger->information(log_start + "Obtained between keys " + keys + " in collection '" +
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
+				if (range.empty())
+				{
+					msg.status = db_ipc::command_status::ATTTEMT_TO_OBTAIN_NONEXISTENT_KEY;
+					msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
+				}
 				for (int i = 0; i < range.size(); ++i)
                 {
                     if (i == range.size() - 1)
                     {
-						sleep(1);
+						usleep(200);
 						//msg.mtype = 9; // TODO CHECK
                         msg.status = db_ipc::command_status::OBTAIN_BETWEEN_END;
                     }
@@ -654,7 +653,7 @@ int main(int argc, char** argv)
                     msg.hashed_password = range[i].second.hashed_password;
                     strcpy(msg.name, range[i].second.name.c_str());
 					
-                    msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                    msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
                 }
 				
 				break;
@@ -700,7 +699,7 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
                 break;
             }
 			case db_ipc::command::OBTAIN_MAX:
@@ -744,7 +743,7 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
                 break;
             }
 			case db_ipc::command::OBTAIN_NEXT:
@@ -790,7 +789,7 @@ int main(int argc, char** argv)
 							msg.pool_name + '/' + msg.schema_name + '/' + msg.collection_name + "'");
 				}
 				
-                msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+                msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
                 break;
             }
 			default:
@@ -819,7 +818,7 @@ void run_terminal_reader()
 			msg.mtype = 1;
             msg.cmd = db_ipc::command::SHUTDOWN;
 			
-            msgsnd(mq_descriptor, &msg, db_ipc::STORAGE_SERVER_MSG_SIZE, 0);
+            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
             run_flag = 0;
             
             break;
