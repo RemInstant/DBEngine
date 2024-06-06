@@ -106,7 +106,7 @@ void handle_data_command(
     db_ipc::strg_msg_t &msg);
 
 int main()
-l{
+{
     msgctl(msgget(db_ipc::STORAGE_SERVER_MQ_KEY, 0666), IPC_RMID, nullptr);
     
     bool is_filesystem = true;
