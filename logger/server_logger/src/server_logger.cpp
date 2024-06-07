@@ -13,17 +13,20 @@ server_logger::server_logger(std::map<std::string, std::set<severity>> const &lo
     _configuration(log_dest)
 {
     _mq_descriptor = msgget(LINUX_MSG_QUEUE_KEY, 0666);
-	
-	// if (_mq_descriptor == -1)
-	// {
-    //     throw std::runtime_error("Cannot connect to the server");
-	// }
 }
 
 logger const *server_logger::log(
     const std::string &text,
     logger::severity severity) const noexcept
 {
+    msqid_ds ds;
+    int res = msgctl(_mq_descriptor, IPC_STAT, &ds);
+    
+    if (res == -1)
+    {
+        _mq_descriptor = msgget(LINUX_MSG_QUEUE_KEY, 0666);
+    }
+    
     for (auto record : _configuration)
     {
         const std::string &file_path = record.first;
