@@ -265,10 +265,10 @@ allocator::block_pointer_t allocator_red_black_tree::get_best_fit(block_size_t s
             get_prev_block(get_next_block(target_block)) = new_block;
         }
         get_next_block(target_block) = new_block;
-        *reinterpret_cast<block_size_t*>(reinterpret_cast<unsigned char*>(new_block) + 2 * sizeof(block_pointer_t)) = new_block_size;
-        *reinterpret_cast<block_size_t*>(reinterpret_cast<unsigned char*>(target_block) + 2 * sizeof(block_pointer_t)) = size_to_alloc - get_occupied_block_meta_size();
+        get_block_data_size(new_block) = new_block_size;
         insert_to_tree(new_block, new_block_size);
     }
+    get_block_data_size(target_block) = size_to_alloc - get_occupied_block_meta_size();
     occupy_block(target_block);
     get_block_allocator(target_block) = this;
     return reinterpret_cast<unsigned char*>(target_block) + get_occupied_block_meta_size();

@@ -23,7 +23,7 @@ class tvalue final
 
 public:
 
-	uint64_t hashed_password;
+	uint64_t karma;
 	std::string name; // flyweight
 
 public:
@@ -31,7 +31,7 @@ public:
 	tvalue();
 	
 	tvalue(
-		uint64_t hashed_password,
+		uint64_t karma,
 		std::string const &name);
 
 public:

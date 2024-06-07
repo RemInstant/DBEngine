@@ -32,8 +32,6 @@ void run_session(
 
 int main()
 {
-	// TODO ADD REQUEST ID
-	
 	pid_t pid = getpid();
 	
 	while (getpid() <= db_ipc::MANAGER_SERVER_MAX_COMMAND_PRIOR)
@@ -90,23 +88,23 @@ db_ipc::allocator_variant read_allocator(
 		throw std::runtime_error("Expected allocator type");
 	}
 	
-    if (allocator == "global_heap")
+    if (allocator == "globalHeap")
     {
         return db_ipc::allocator_variant::GLOBAL_HEAP;
     }
-    else if (allocator == "boundary_tags")
+    else if (allocator == "boundaryTags")
     {
         return db_ipc::allocator_variant::BOUNDARY_TAGS;
     }
-    else if (allocator == "buddies_system")
+    else if (allocator == "buddiesSystem")
     {
         return db_ipc::allocator_variant::BUDDY_SYSTEM;
     }
-    else if (allocator == "sorted_list")
+    else if (allocator == "sortedList")
     {
         return db_ipc::allocator_variant::SORTED_LIST;
     }
-    else if (allocator == "red_black_tree")
+    else if (allocator == "redBlackTree")
     {
         return db_ipc::allocator_variant::RED_BLACK_TREE;
     }
@@ -140,6 +138,52 @@ db_ipc::allocator_fit_mode read_allocator_fit_mode(
 	throw std::runtime_error("Invalid allocator fit mode");
 }
 
+bool read_long_string(
+	std::istringstream &args, std::string &str)
+{
+    if (!(args >> str))
+    {
+        return false;
+    }
+
+    if (str[0] == '\'')
+    {
+        name.erase(0, 1);
+
+        if (args.peek() == '\'')
+        {
+            args.get();
+            return true;
+        }
+
+        char cur;
+        while (args.good())
+        {
+            if ((cur = args.get()) == '\'')
+            {
+                cur = args.get();
+				
+                if (cur != EOF && !isspace(cur))
+                {
+                    return false;
+                }
+                return true;
+            }
+			
+            if (isspace(cur))
+            {
+                cur = ' ';
+            }
+
+            name += cur;
+        }
+		
+        return false;
+    }
+    
+    return true;
+}
+
 std::string read_key(
 	std::istringstream &args)
 {
@@ -166,7 +210,7 @@ tvalue read_value(
 {
     tvalue value;
 	
-    if (!(args >> value.hashed_passwod && args >> value.name))
+    if (!(args >> value.hashed_passwod && read_long_string(args, value.name)))
     {
 		throw std::runtime_error("Expected value");
     }
@@ -243,7 +287,7 @@ void handle_add_command(
 	strcpy(msg.collection_name, collection_name.c_str());
 	
 	strcpy(msg.login, key.c_str());
-	msg.hashed_password = value.hashed_passwod;
+	msg.karma = value.hashed_passwod;
 	strcpy(msg.name, value.name.c_str());
 	
 	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
@@ -275,7 +319,7 @@ void handle_update_command(
 	strcpy(msg.collection_name, collection_name.c_str());
 	
 	strcpy(msg.login, key.c_str());
-	msg.hashed_password = value.hashed_passwod;
+	msg.karma = value.hashed_passwod;
 	strcpy(msg.name, value.name.c_str());
 	
 	int snd = msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
@@ -665,16 +709,16 @@ void handle_server_answer(
 	switch (msg.cmd)
 	{
 		case db_ipc::command::ADD:
-			std::cout << "Added record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+			std::cout << "Added record { " << msg.login << " : " << msg.karma << ", " << msg.name << " }." << std::endl;
 			break;
 		case db_ipc::command::UPDATE:
-			std::cout << "Updated record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+			std::cout << "Updated record { " << msg.login << " : " << msg.karma << ", " << msg.name << " }." << std::endl;
 			break;
 		case db_ipc::command::DISPOSE:
-			std::cout << "Disposed record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+			std::cout << "Disposed record { " << msg.login << " : " << msg.karma << ", " << msg.name << " }." << std::endl;
 			break;
 		case db_ipc::command::OBTAIN:
-			std::cout << "Obtained record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+			std::cout << "Obtained record { " << msg.login << " : " << msg.karma << ", " << msg.name << " }." << std::endl;
 			break;
 		case db_ipc::command::OBTAIN_BETWEEN:
 			{
@@ -682,7 +726,7 @@ void handle_server_answer(
 				size_t target = msg.extra_value;
 				
 				std::cout << "Between " << login << " and " << msg.right_boundary_login << std::endl <<
-					"Obtained record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+					"Obtained record { " << msg.login << " : " << msg.karma << ", " << msg.name << " }." << std::endl;
 				
 				while(counter != target)
 				{
@@ -693,7 +737,7 @@ void handle_server_answer(
 						throw std::runtime_error("Cannot receive server answer");
 					}
 					
-					std::cout << "Obtained record { " << msg.login << " : " << msg.hashed_password << ", " << msg.name << " }." << std::endl;
+					std::cout << "Obtained record { " << msg.login << " : " << msg.karma << ", " << msg.name << " }." << std::endl;
 					
 					if (msg.status == db_ipc::command_status::OBTAIN_BETWEEN_END) ++counter;
 				
@@ -745,31 +789,6 @@ int msgrcvt(
 		{
 			sleep(2);
 		}
-		
-		// if (rcv == -1)
-		// {
-		// 	if (counter < 5)
-		// 	{
-		// 		usleep(250);
-		// 	}
-		// 	else
-		// 	{
-		// 		msg.cmd = db_ipc::command::PING;
-		// 		msgsnd(descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
-		// 	}
-		// }
-		// else if (msg.cmd == db_ipc::command::PING)
-		// {
-		// 	if (msg.status == db_ipc::command_status::SERVER_IS_BUSY)
-		// 	{
-		// 		std::cout << "Server is busy. Please, wait" << std::endl;
-		// 		sleep(10);
-		// 		counter = 0;
-		// 	}
-			
-		// 	rcv = -1;
-		// 	msg.status = db_ipc::command_status::OK;	
-		// }
 		
     } while (++counter < max_counter && rcv == -1);
     

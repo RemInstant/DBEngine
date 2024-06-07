@@ -17,8 +17,6 @@
 int run_flag = 1;
 int mq_descriptor = -1;
 
-void run_terminal_reader();
-
 #include "sys/stat.h"
 
 int main(int argc, char** argv)
@@ -449,7 +447,7 @@ int main(int argc, char** argv)
 			{
 				try
 				{
-					db->add(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.hashed_password, msg.name));
+					db->add(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.karma, msg.name));
 				}
 				catch (db_storage::setup_failure const &)
 				{
@@ -495,7 +493,7 @@ int main(int argc, char** argv)
 			{
 				try
 				{
-					db->update(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.hashed_password, msg.name));
+					db->update(msg.pool_name, msg.schema_name, msg.collection_name, msg.login, tvalue(msg.karma, msg.name));
 				}
 				catch (db_storage::setup_failure const &)
 				{
@@ -542,7 +540,7 @@ int main(int argc, char** argv)
 				try
 				{
 					tvalue value = db->dispose(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
-					msg.hashed_password = value.hashed_password;
+					msg.karma = value.karma;
 					strcpy(msg.name, value.name.c_str());
 				}
 				catch (db_storage::setup_failure const &)
@@ -585,7 +583,7 @@ int main(int argc, char** argv)
 				try
 				{
 					tvalue value = db->obtain(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
-					msg.hashed_password = value.hashed_password;
+					msg.karma = value.karma;
 					strcpy(msg.name, value.name.c_str());
 				}
 				catch (db_storage::setup_failure const &)
@@ -673,7 +671,7 @@ int main(int argc, char** argv)
                         msg.status = db_ipc::command_status::OBTAIN_BETWEEN_END;
                     }
                     strcpy(msg.login, range[i].first.c_str());
-                    msg.hashed_password = range[i].second.hashed_password;
+                    msg.karma = range[i].second.karma;
                     strcpy(msg.name, range[i].second.name.c_str());
 					
                     msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
@@ -687,7 +685,7 @@ int main(int argc, char** argv)
                 {
 					std::pair<tkey, tvalue> kvp = db->obtain_min(msg.pool_name, msg.schema_name, msg.collection_name);
 					strcpy(msg.login, kvp.first.c_str());
-					msg.hashed_password = kvp.second.hashed_password;
+					msg.karma = kvp.second.karma;
 					strcpy(msg.name, kvp.second.name.c_str());
                 }
 				catch (db_storage::setup_failure const &)
@@ -731,7 +729,7 @@ int main(int argc, char** argv)
                 {
 					std::pair<tkey, tvalue> kvp = db->obtain_max(msg.pool_name, msg.schema_name, msg.collection_name);
 					strcpy(msg.login, kvp.first.c_str());
-					msg.hashed_password = kvp.second.hashed_password;
+					msg.karma = kvp.second.karma;
 					strcpy(msg.name, kvp.second.name.c_str());
                 }
 				catch (db_storage::setup_failure const &)
@@ -777,7 +775,7 @@ int main(int argc, char** argv)
                 {
 					std::pair<tkey, tvalue> kvp = db->obtain_next(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
 					strcpy(msg.login, kvp.first.c_str());
-					msg.hashed_password = kvp.second.hashed_password;
+					msg.karma = kvp.second.karma;
 					strcpy(msg.name, kvp.second.name.c_str());
                 }
 				catch (db_storage::setup_failure const &)
@@ -822,26 +820,4 @@ int main(int argc, char** argv)
     
 	db->consolidate();
 	delete logger;
-}
-
-
-
-void run_terminal_reader()
-{
-    db_ipc::strg_msg_t msg;
-    std::string cmd;
-    
-    while (std::cin >> cmd)
-    {
-        if (cmd == "shutdown")
-        {
-			msg.mtype = 1;
-            msg.cmd = db_ipc::command::SHUTDOWN;
-			
-            msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
-            run_flag = 0;
-            
-            break;
-        }
-    }
 }

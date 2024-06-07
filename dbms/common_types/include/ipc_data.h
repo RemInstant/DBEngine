@@ -139,7 +139,7 @@ namespace db_ipc
 		
 		char login[MSG_KEY_SIZE];
 		char right_boundary_login[MSG_KEY_SIZE];
-		int64_t hashed_password;
+		int64_t karma;
 		char name[MSG_NAME_SIZE];
 	};
 	

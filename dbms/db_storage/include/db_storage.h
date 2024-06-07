@@ -194,12 +194,6 @@ private:
 		
 		size_t _records_cnt;
 		size_t _disposed_cnt;
-		
-		// disposed_cnt >= 0.35 * records_cnt
-		
-		// string_pool.clean();
-		// consolidate();
-		// disposed_cnt = 0;
 	
 	public:
 	

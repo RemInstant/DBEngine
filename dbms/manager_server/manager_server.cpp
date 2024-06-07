@@ -68,9 +68,8 @@ void load_separators(
 void run_terminal_reader(
     std::vector<pid_t> *strg_servers);
 
-pid_t run_server_logger();
-
 pid_t run_storage_server(
+    logger* logger,
     size_t strg_server_id);
 
 
@@ -86,6 +85,7 @@ int redistribute_keys(
 #pragma region command handlers
 
 void handle_add_server_command(
+    logger* logger,
     bool is_filesystem,
     std::vector<pid_t> &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
@@ -245,11 +245,6 @@ int main(int argc, char** argv)
         
         switch (msg.cmd)
         {
-            case db_ipc::command::PING:
-            {
-                msg.mtype = msg.pid;
-                msg.status = db_ipc::command_status::OK;
-            }
             case db_ipc::command::SHUTDOWN:
 			{
                 try
@@ -268,7 +263,7 @@ int main(int argc, char** argv)
             {
                 try
                 {
-                    handle_add_server_command(is_filesystem, strg_servers, separators, msg);
+                    handle_add_server_command(log, is_filesystem, strg_servers, separators, msg);
                     save_config(strg_servers.size());
                 }
                 catch (std::ios::failure const &ex)
@@ -314,13 +309,13 @@ int main(int argc, char** argv)
                 break;
             }
             case db_ipc::command::ADD:
-            case db_ipc::command::UPDATE:
             case db_ipc::command::DISPOSE:
             {
                 ++data_change_counter;
                 handle_data_command(strg_servers, separators, msg);
                 break;
             }
+            case db_ipc::command::UPDATE:
             case db_ipc::command::OBTAIN:
             case db_ipc::command::OBTAIN_MIN:
             case db_ipc::command::OBTAIN_MAX:
@@ -691,6 +686,7 @@ int transfer_right_n(
 #pragma endregion ipc utility
 
 void handle_add_server_command(
+    logger* logger,
     bool is_filesystem,
     std::vector<pid_t> &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
@@ -698,11 +694,12 @@ void handle_add_server_command(
 {
     size_t id = strg_servers.size() + 1;
     
-    pid_t pid = run_storage_server(id);
+    pid_t pid = run_storage_server(logger, id);
     
     if (pid == -1)
     {
         std::cout << "Failed to add storage server" << std::endl;
+        log->error("[Mngr " + std::to_string(getpid()) + "] Failed to add storage server");
         return;
     }
     
@@ -783,6 +780,7 @@ void handle_terminate_server_command(
 }
 
 pid_t run_storage_server(
+    logger* logger,
     size_t strg_server_id)
 {
     pid_t pid = fork();
@@ -796,11 +794,10 @@ pid_t run_storage_server(
             exit(1);
         }
     }
-    
-    if (pid == -1)
+    else if (pid == -1)
     {
-        std::cout << "fork error" << std::endl;
-        // todo throw
+        log->error("[Mngr " + std::to_string(getpid()) + "] Failed to fork");
+        std::cout << "Failed to fork" << std::endl;
         return -1;
     }
     
@@ -810,6 +807,9 @@ pid_t run_storage_server(
     {
         return pid;
     }
+    
+    log->error("[Mngr " + std::to_string(getpid()) + "] Runned server (" std::to_string(pid) + ") does not responding");
+    std::cout << "Runned server (" std::to_string(pid) + ") does not responding" << std::endl;
     
     return -1;
 }

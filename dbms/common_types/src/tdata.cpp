@@ -16,14 +16,14 @@ int tkey_comparer::operator()(
 }
 
 tvalue::tvalue():
-		hashed_password(0),
+		karma(0),
 		name("")
 { }
 
 tvalue::tvalue(
-	uint64_t hashed_password,
+	uint64_t karma,
 	std::string const &name):
-		hashed_password(hashed_password),
+		karma(karma),
 		name(name)
 { }
 
@@ -35,7 +35,7 @@ tvalue::tvalue(
 
 // tvalue::tvalue(
 // 	tvalue const &other):
-// 		hashed_password(other.hashed_password),
+// 		karma(other.karma),
 // 		name(new char[strlen(other.name) + 1])
 // {
 // 	strcpy(name, other.name);
@@ -56,7 +56,7 @@ tvalue::tvalue(
 
 // tvalue::tvalue(
 // 	tvalue &&other) noexcept:
-// 		hashed_password(other.hashed_password),
+// 		karma(other.karma),
 // 		name(other.name)
 // {
 // 	other.name = nullptr;
@@ -67,7 +67,7 @@ tvalue::tvalue(
 // {
 // 	if (this != &other)
 // 	{
-// 		hashed_password = other.hashed_password;
+// 		karma = other.karma;
 // 		name = other.name;
 		
 // 		other.name = nullptr;
@@ -121,7 +121,7 @@ void file_tdata::serialize(
 	
     data_stream.write(reinterpret_cast<char const *>(&login_len), sizeof(size_t));
     data_stream.write(key.c_str(), sizeof(char) * login_len);
-    data_stream.write(reinterpret_cast<char const *>(&value.hashed_password), sizeof(int64_t));
+    data_stream.write(reinterpret_cast<char const *>(&value.karma), sizeof(int64_t));
     data_stream.write(reinterpret_cast<char const *>(&name_len), sizeof(size_t));
     data_stream.write(value.name.c_str(), sizeof(char) * name_len);
 	data_stream.flush();
@@ -152,7 +152,7 @@ tvalue file_tdata::deserialize(
 	
 	data_stream.read(reinterpret_cast<char *>(&login_len), sizeof(size_t));
 	data_stream.seekg(login_len, std::ios::cur);
-    data_stream.read(reinterpret_cast<char *>(&value.hashed_password), sizeof(size_t));
+    data_stream.read(reinterpret_cast<char *>(&value.karma), sizeof(size_t));
 	data_stream.read(reinterpret_cast<char *>(&name_len), sizeof(size_t));
 	
 	value.name.resize(name_len);
