@@ -189,7 +189,15 @@ int main(int argc, char** argv)
 			case db_ipc::command::GET_RECORDS_CNT:
 			{
 				msg.mtype = db_ipc::MANAGER_SERVER_STORAGE_GETTING_RECORDS_CNT_PRIOR;
-				msg.extra_value = db->get_collection_records_cnt(msg.pool_name, msg.schema_name, msg.collection_name);
+				try
+				{
+					msg.extra_value = db->get_collection_records_cnt(msg.pool_name, msg.schema_name, msg.collection_name);
+				}
+				catch(db_storage::invalid_path_exception const&)
+				{
+					msg.status = db_ipc::command_status::INVALID_PATH;
+				}
+				
 				msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
 				break;
 			}

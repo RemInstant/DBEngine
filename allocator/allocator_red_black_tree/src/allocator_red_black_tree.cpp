@@ -879,7 +879,7 @@ inline allocator_with_fit_mode::fit_mode &allocator_red_black_tree::get_fit_mode
 
 std::vector<allocator_test_utils::block_info> allocator_red_black_tree::get_blocks_info() const noexcept
 {
-    throw not_implemented("std::vector<allocator_test_utils::block_info> allocator_red_black_tree::get_blocks_info() const noexcept", "your code should be here...");
+    //throw not_implemented("std::vector<allocator_test_utils::block_info> allocator_red_black_tree::get_blocks_info() const noexcept", "your code should be here...");
 }
 
 inline std::string allocator_red_black_tree::get_typename() const noexcept

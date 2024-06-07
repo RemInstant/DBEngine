@@ -122,12 +122,13 @@ void handle_obtain_between_command(
 
 int main(int argc, char** argv)
 {
-    if (argc != 2)
-    {
-        std::cout << "Usage: ./exe <-f/-m>" << std::endl;
-        return 0;
-    }
+    // if (argc != 2)
+    // {
+    //     std::cout << "Usage: ./exe <-f/-m>" << std::endl;
+    //     return 0;
+    // }
     
+    argv[1] = "1";
     bool is_filesystem;
     std::string mode = std::string(argv[1]);
 
@@ -141,8 +142,9 @@ int main(int argc, char** argv)
     }
     else
     {
-        std::cout << "Invalid mode" << std::endl;
-        return 1;
+        // std::cout << "Invalid mode" << std::endl;
+        // return 1;
+        is_filesystem = true;
     }
     
     logger *log = nullptr;
@@ -523,7 +525,7 @@ int msgrcvt(
     do
     {
         rcv = msgrcv(descriptor, &msg, msg_size, mtypes, flags | IPC_NOWAIT);
-        usleep(counter < 5 ? 150 : counter * 200);
+        usleep(counter < 5 ? 250 : counter * 250);
     } while (++counter < max_counter && rcv == -1);
     
     return rcv;
@@ -591,7 +593,7 @@ int transfer_left(
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK)
     {
-        std::cout << "WORST CASE" << std::endl;
+        std::cout << "WORST CASE1" << std::endl;
     }
     
     separators[path][id - 1] = new_separator;
@@ -645,7 +647,8 @@ int transfer_right(
     
     if (rcv == -1 || msg.status != db_ipc::command_status::OK)
     {
-        std::cout << "WORST CASE" << std::endl;
+        std::cout << rcv << ' ' << static_cast<int>(msg.status) << std:: endl;
+        std::cout << "WORST CASE2" << std::endl;
     }
     
     separators[path][id] = new_separator;

@@ -153,6 +153,10 @@ std::string read_key(
 	{
 		throw std::runtime_error("Invalid key");
 	}
+	if (key.size() > db_ipc::MSG_KEY_SIZE)
+	{
+		throw std::runtime_error("Too big key");
+	}
 	
     return key;
 }
@@ -165,6 +169,10 @@ tvalue read_value(
     if (!(args >> value.hashed_passwod && args >> value.name))
     {
 		throw std::runtime_error("Expected value");
+    }
+    if (value.name.size() > db_ipc::MSG_NAME_SIZE)
+    {
+		throw std::runtime_error("Too big name");
     }
 
     return value;
