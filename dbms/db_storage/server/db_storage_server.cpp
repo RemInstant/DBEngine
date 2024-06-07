@@ -30,7 +30,6 @@ int main(int argc, char** argv)
 		switch (pid = fork())
 		{
 			case -1:
-				std::cout << "An error occurred while starting client process" << std::endl;
 				return 1;
 			case 0:
 				break;
@@ -66,28 +65,16 @@ int main(int argc, char** argv)
 			->add_console_stream(logger::severity::error)
 			->build();
 	}
-	catch (std::bad_alloc const &)
+	catch (...)
 	{
-        std::cout << "Critical bad alloc" << std::endl;
-		return 1;
+		return 2;
 	}
-    catch (file_cannot_be_opened const &)
-    {
-        std::cout << "Logger path cannot be opened" << std::endl;
-        return 1;
-    }
-    catch (std::runtime_error const &ex)
-    {
-        std::cout << ex.what() << std::endl;
-        return 1;
-    }
 	
     mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
     {
-        std::cout << "Cannot open the message queue. Shutdown." << std::endl;
 		logger->error(log_base + "[-----] Failed to open message queue");
-        return 2;
+        return 3;
     }
 	
 	logger->information(log_base + "[-----] Server started");
@@ -98,7 +85,6 @@ int main(int argc, char** argv)
         if (rcv_cnt == -1)
         {
 			logger->error(log_base + "[-----] An error occurred while receiving the message. Shutdown");
-            std::cout << "An error occurred while receiving the message" << std::endl;
             break;
         }
 		
@@ -835,10 +821,7 @@ int main(int argc, char** argv)
     }
     
 	db->consolidate();
-    
-    std::cout << "Storage server shutdowned" << std::endl;
-    
-    //cmd_thread.detach();
+	delete logger;
 }
 
 
