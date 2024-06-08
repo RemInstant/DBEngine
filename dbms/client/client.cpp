@@ -103,8 +103,11 @@ int main(int argc, char** argv)
 	catch (std::runtime_error const &ex)
 	{
 		std::cout << ex.what() << std::endl;
+		delete log;
 		return 5;
 	}
+	
+	delete log;
 }
 
 
