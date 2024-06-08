@@ -20,8 +20,9 @@
 #include <tdata.h>
 #include <b_tree.h>
 #include <file_cannot_be_opened.h>
-
 #include <server_logger.h>
+
+#include <flyweight_string_pool.h>
 
 struct db_path
 {
@@ -81,6 +82,7 @@ size_t get_id_for_key(
     std::string const &key);
 
 int redistribute_keys(
+    logger *log,
     std::vector<pid_t> const &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators);
 
@@ -96,6 +98,7 @@ void handle_add_server_command(
     db_ipc::strg_msg_t &msg);
     
 void handle_terminate_server_command(
+    logger *log,
     std::vector<pid_t> &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
     db_ipc::strg_msg_t &msg);
@@ -123,6 +126,7 @@ void handle_obtain_between_command(
 #pragma endregion command handler
 
 // /home/remi/Code/VSCode/os_cw/build/dbms/manager_server/os_cw_dbms_mngr_srvr -m logger_config.json server_logger_builder.config
+// sudo sysctl -w kernel.yama.ptrace_scope=0
 
 int main(int argc, char** argv)
 {
@@ -213,6 +217,8 @@ int main(int argc, char** argv)
         return 3;
     }
     
+    log->information("[MNGR   " + std::to_string(getpid()) + "] Manager is started.");
+    
     int rcv = -1;
     do
     {
@@ -229,6 +235,7 @@ int main(int argc, char** argv)
     
     while (run_flag)
     {
+        usleep(50);
         ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, -db_ipc::MANAGER_SERVER_MAX_COMMON_PRIOR, MSG_NOERROR);
         
         if (rcv_cnt == -1)
@@ -237,8 +244,15 @@ int main(int argc, char** argv)
             break;
         }
         
-        log->information("[Manager " + std::to_string(getpid()) + "] read from " + std::to_string(msg.pid));
-        std::cout << "[Manager " << getpid() << "] read from " << msg.pid << std::endl;
+        if (msg.srvr_pid == static_cast<int>(db_ipc::command_status::CLIENT))
+        {
+            log->information("[MNGR   " + std::to_string(getpid()) + "] read from " + std::to_string(msg.pid));
+        }
+        else
+        {
+            log->information("[MNGR   " + std::to_string(getpid()) + "] read from " + std::to_string(msg.srvr_pid));
+        }
+        
         
         msg.mtype = msg.pid;
         
@@ -264,6 +278,7 @@ int main(int argc, char** argv)
                 {
                     handle_add_server_command(log, argv[2], argv[3], is_filesystem, strg_servers, separators, msg);
                     save_config(strg_servers.size());
+                    std::cout << "Runned storage server [" + std::to_string(strg_servers.size()) + "]" << std::endl;
                 }
                 catch (std::ios::failure const &ex)
                 {
@@ -279,8 +294,9 @@ int main(int argc, char** argv)
             {
                 try
                 {
-                    handle_terminate_server_command(strg_servers, separators, msg);
+                    handle_terminate_server_command(log, strg_servers, separators, msg);
                     save_config(strg_servers.size());
+                    std::cout << "Terminated storage server [" + std::to_string(strg_servers.size() + 1) + "]" << std::endl;
                 }
                 catch (std::ios::failure const &ex)
                 {
@@ -331,9 +347,9 @@ int main(int argc, char** argv)
                 break;
         }
         
-        if (data_change_counter >= 30 * (1 + strg_servers.size()))
+        if (data_change_counter >= 4)
         {
-            redistribute_keys(strg_servers, separators);
+            redistribute_keys(log, strg_servers, separators);
             data_change_counter = 0;
         }
     }
@@ -465,6 +481,8 @@ void run_terminal_reader(
 {
     db_ipc::strg_msg_t msg;
     std::string line, cmd;
+    
+    msg.pid = getpid();
     
     while (std::getline(std::cin, cmd))
     {
@@ -729,11 +747,12 @@ void handle_add_server_command(
             pair.second.push_back(std::string(db_ipc::MSG_KEY_SIZE, 127));
         }
         
-        redistribute_keys(strg_servers, separators);
+        redistribute_keys(log, strg_servers, separators);
     }
 }
 
 void handle_terminate_server_command(
+    logger *log,
     std::vector<pid_t> &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
     db_ipc::strg_msg_t &msg)
@@ -777,7 +796,7 @@ void handle_terminate_server_command(
     
     strg_servers.erase(strg_servers.begin() + id);
     
-    redistribute_keys(strg_servers, separators);
+    redistribute_keys(log, strg_servers, separators);
 }
 
 pid_t run_storage_server(
@@ -845,6 +864,7 @@ size_t get_id_for_key(
 }
 
 int redistribute_path_keys(
+    logger *log,
     std::vector<pid_t> const &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
     db_path const &path)
@@ -873,6 +893,7 @@ int redistribute_path_keys(
         
         if (rcv == -1)
         {
+            log->information("DEBUG");
             return -1;
         }
         
@@ -903,7 +924,7 @@ int redistribute_path_keys(
     {
         return 0;
     }
-    
+
     std::vector<long long> differ(sz);
     std::vector<long long> differ_prefix(sz, 0);
     
@@ -911,6 +932,13 @@ int redistribute_path_keys(
     {
         differ[i] = cnts[i] - (target_cnt + (i < additional ? 1 : 0));
         differ_prefix[i] = (i > 0 ? differ_prefix[i-1] : 0) + differ[i];
+    }
+        
+    for (size_t i = 0; i < sz; ++i)
+    {
+
+        log->information("DEBUG cnt " + std::to_string(cnts[i]) + " " +
+                std::to_string(differ[i]) + " " + std::to_string(differ_prefix[i]));
     }
     
     for (size_t i = 0; i < sz; ++i)
@@ -922,14 +950,22 @@ int redistribute_path_keys(
                 for (size_t j = i; j > 0; --j)
                 {
                     int res = transfer_left_n(strg_servers, separators, path, j, -differ_prefix[j - 1]);
-                    if (res) return res;
+                    if (res) 
+                    {
+            log->information("DEBUG left");
+                        return res;
+                    }
                 }
                 differ[i] += differ_prefix[i - 1];
             }
             if (i + 1 < sz && differ[i] > 0)
             {
                 int res = transfer_right_n(strg_servers, separators, path, i, differ[i]);
-                if (res) return res;
+                if (res)
+                {
+                    log->information("DEBUG right ");
+                    return res;
+                }
                 differ[i + 1] += differ[i];
             }
             
@@ -941,19 +977,22 @@ int redistribute_path_keys(
 }
 
 int redistribute_keys(
+    logger *log,
     std::vector<pid_t> const &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators)
 {
     int main_res = 0;
-    
-    // std::thread assistant_thread(run_assistant_reader);
+        
+    log->information("[MNGR   " + std::to_string(getpid()) + "] Keys redistribution is started.");
     
     for (auto &pair : separators)
     {
-        int res = redistribute_path_keys(strg_servers, separators, pair.first);
+        int res = redistribute_path_keys(log, strg_servers, separators, pair.first);
         if (res)
         {
-            std::cout << "Keys distribution aborted due to some error" << std::endl;
+            log->information("[MNGR   " + std::to_string(getpid()) +
+                    "] Keys redistribution is aborted with code " + std::to_string(res));
+            std::cout << "Keys distribution aborted with code " << res << std::endl;
         }
         main_res |= res;
     }
@@ -963,7 +1002,8 @@ int redistribute_keys(
     msg.cmd = db_ipc::command::TERMINATE_ASSISTANT_THREAD;
     
     msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
-    // assistant_thread.join();
+    
+    log->information("[MNGR   " + std::to_string(getpid()) + "] Keys redistribution is finished");
     
     return main_res;
 }
@@ -1018,6 +1058,7 @@ void handle_add_struct_command(
                 msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, MSG_NOERROR);
                 return;
             }
+            usleep(50);
         }
         
         if (msg.cmd == db_ipc::command::ADD_COLLECTION)

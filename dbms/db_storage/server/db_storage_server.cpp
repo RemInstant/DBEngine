@@ -79,6 +79,7 @@ int main(int argc, char** argv)
 	
     while (run_flag)
     {
+		usleep(50);
         ssize_t rcv_cnt = msgrcv(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, pid, MSG_NOERROR);
         if (rcv_cnt == -1)
         {
@@ -94,6 +95,7 @@ int main(int argc, char** argv)
 		
 		msg.mtype = db_ipc::MANAGER_SERVER_STORAGE_ANSWER_PRIOR;
 		msg.status = db_ipc::command_status::OK;
+		msg.srvr_pid = pid;
         
 		switch (msg.cmd)
 		{
@@ -541,7 +543,7 @@ int main(int argc, char** argv)
 				{
 					tvalue value = db->dispose(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
 					msg.karma = value.karma;
-					strcpy(msg.name, value.name.c_str());
+					strcpy(msg.name, value.name.get()->get_data().c_str());
 				}
 				catch (db_storage::setup_failure const &)
 				{
@@ -584,7 +586,7 @@ int main(int argc, char** argv)
 				{
 					tvalue value = db->obtain(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
 					msg.karma = value.karma;
-					strcpy(msg.name, value.name.c_str());
+					strcpy(msg.name, value.name.get()->get_data().c_str());
 				}
 				catch (db_storage::setup_failure const &)
 				{
@@ -672,7 +674,7 @@ int main(int argc, char** argv)
                     }
                     strcpy(msg.login, range[i].first.c_str());
                     msg.karma = range[i].second.karma;
-                    strcpy(msg.name, range[i].second.name.c_str());
+                    strcpy(msg.name, range[i].second.name.get()->get_data().c_str());
 					
                     msgsnd(mq_descriptor, &msg, db_ipc::MANAGER_SERVER_MSG_SIZE, 0);
                 }
@@ -686,7 +688,7 @@ int main(int argc, char** argv)
 					std::pair<tkey, tvalue> kvp = db->obtain_min(msg.pool_name, msg.schema_name, msg.collection_name);
 					strcpy(msg.login, kvp.first.c_str());
 					msg.karma = kvp.second.karma;
-					strcpy(msg.name, kvp.second.name.c_str());
+					strcpy(msg.name, kvp.second.name.get()->get_data().c_str());
                 }
 				catch (db_storage::setup_failure const &)
 				{
@@ -730,7 +732,7 @@ int main(int argc, char** argv)
 					std::pair<tkey, tvalue> kvp = db->obtain_max(msg.pool_name, msg.schema_name, msg.collection_name);
 					strcpy(msg.login, kvp.first.c_str());
 					msg.karma = kvp.second.karma;
-					strcpy(msg.name, kvp.second.name.c_str());
+					strcpy(msg.name, kvp.second.name.get()->get_data().c_str());
                 }
 				catch (db_storage::setup_failure const &)
 				{
@@ -776,7 +778,7 @@ int main(int argc, char** argv)
 					std::pair<tkey, tvalue> kvp = db->obtain_next(msg.pool_name, msg.schema_name, msg.collection_name, msg.login);
 					strcpy(msg.login, kvp.first.c_str());
 					msg.karma = kvp.second.karma;
-					strcpy(msg.name, kvp.second.name.c_str());
+					strcpy(msg.name, kvp.second.name.get()->get_data().c_str());
                 }
 				catch (db_storage::setup_failure const &)
 				{

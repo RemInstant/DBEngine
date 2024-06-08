@@ -2,8 +2,10 @@
 #define OPERATING_SYSTEMS_COURSE_WORK_DATABASE_MANAGEMENT_SYSTEM_COMMON_TYPES_TDATA
 
 #include <allocator.h>
+#include <flyweight_string_pool.h>
 
-using tkey = std::string; // flyweight
+using tkey = std::string;
+using flyweight_tkey = std::shared_ptr<flyweight_string>; // flyweight
 
 class tkey_comparer final
 {
@@ -13,7 +15,11 @@ public:
     int operator()(
         tkey const &lhs,
         tkey const &rhs) const;
-
+	
+	int operator()(
+        flyweight_tkey const &lhs,
+        flyweight_tkey const &rhs) const;
+	
 	// flyweight comparer
 
 };
@@ -24,7 +30,7 @@ class tvalue final
 public:
 
 	uint64_t karma;
-	std::string name; // flyweight
+	std::shared_ptr<flyweight_string> name; // flyweight
 
 public:
 	
@@ -33,22 +39,6 @@ public:
 	tvalue(
 		uint64_t karma,
 		std::string const &name);
-
-public:
-
-	// ~tvalue();
-	
-	// tvalue(
-	// 	tvalue const &other);
-	
-	// tvalue operator=(
-	// 	tvalue const &other);
-	
-	// tvalue(
-	// 	tvalue &&other) noexcept;
-	
-	// tvalue operator=(
-	// 	tvalue &&other) noexcept;
 
 };
 

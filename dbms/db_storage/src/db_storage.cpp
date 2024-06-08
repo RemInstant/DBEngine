@@ -97,7 +97,7 @@ db_storage::collection::collection(
         case search_tree_variant::b_star_plus:
             //break;
         default:
-            _data = new b_tree<tkey, tdata *>(t_for_b_trees, tkey_comparer());
+            _data = new b_tree<flyweight_tkey, tdata *>(t_for_b_trees, tkey_comparer());
             break;
     }
     
@@ -177,6 +177,7 @@ void db_storage::collection::insert(
 {
     collect_garbage(path);
     
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tdata *data = nullptr;
     
     try
@@ -206,7 +207,7 @@ void db_storage::collection::insert(
             reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
         }
         
-        _data->insert(key, data);
+        _data->insert(fw_key, data);
     }
     catch (std::ios::failure const &)
     {
@@ -237,6 +238,7 @@ void db_storage::collection::insert(
 {
     collect_garbage(path);
     
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tdata *data = nullptr;
     
     try
@@ -266,7 +268,7 @@ void db_storage::collection::insert(
             reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
         }
         
-        _data->insert(key, data);
+        _data->insert(fw_key, data);
     }
     catch (std::bad_alloc const &)
     {
@@ -297,6 +299,7 @@ void db_storage::collection::update(
 {
     collect_garbage(path);
     
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tdata *data = nullptr;
     
     try
@@ -326,7 +329,7 @@ void db_storage::collection::update(
             reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
         }
         
-        _data->update(key, data);
+        _data->update(fw_key, data);
     }
     catch (std::bad_alloc const &)
     {
@@ -355,6 +358,7 @@ void db_storage::collection::update(
 {
     collect_garbage(path);
     
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tdata *data = nullptr;
     
     try
@@ -384,7 +388,7 @@ void db_storage::collection::update(
             reinterpret_cast<file_tdata *>(data)->serialize(path, key, value);
         }
         
-        _data->update(key, data);
+        _data->update(fw_key, data);
     }
     catch (std::bad_alloc const &)
     {
@@ -411,11 +415,13 @@ tvalue db_storage::collection::dispose(
     std::string const &path)
 {
     tdata *data = nullptr;
+    
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tvalue value;
     
     try
     {
-        data = _data->dispose(key);
+        data = _data->dispose(fw_key);
     }
     catch (search_tree<tkey, tdata *>::disposal_of_nonexistent_key_attempt_exception)
     {
@@ -455,12 +461,13 @@ tvalue db_storage::collection::obtain(
     std::string const &path)
 {
     collect_garbage(path);
-    
+
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tdata *data = nullptr;
     
     try
     {
-        data = _data->obtain(key);
+        data = _data->obtain(fw_key);
     }
     catch (search_tree<tkey, tdata *>::obtaining_of_nonexistent_key_attempt_exception)
     {
@@ -494,8 +501,11 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
 {
     collect_garbage(path);
     
-    std::vector<typename associative_container<tkey, tdata *>::key_value_pair> data_vec =
-            _data->obtain_between(lower_bound, upper_bound, lower_bound_inclusive, upper_bound_inclusive);
+    flyweight_tkey fw_lower = flyweight_string_pool::get_instance()->make_flyweight(lower_bound);
+    flyweight_tkey fw_upper = flyweight_string_pool::get_instance()->make_flyweight(upper_bound);
+    
+    std::vector<typename associative_container<flyweight_tkey, tdata *>::key_value_pair> data_vec =
+            _data->obtain_between(fw_lower, fw_upper, lower_bound_inclusive, upper_bound_inclusive);
     
     std::vector<std::pair<tkey, tvalue>> value_vec;
     value_vec.reserve(data_vec.size());
@@ -506,7 +516,7 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
         {
             try
             {
-                value_vec.emplace_back(kvp.key, dynamic_cast<file_tdata *>(kvp.value)->deserialize(path));
+                value_vec.emplace_back(kvp.key.get()->get_data(), dynamic_cast<file_tdata *>(kvp.value)->deserialize(path));
             }
             catch (std::ios::failure const &)
             {
@@ -515,7 +525,7 @@ std::vector<std::pair<tkey, tvalue>> db_storage::collection::obtain_between(
         }
         else
         {
-            value_vec.emplace_back(kvp.key, dynamic_cast<ram_tdata *>(kvp.value)->value);
+            value_vec.emplace_back(kvp.key.get()->get_data(), dynamic_cast<ram_tdata *>(kvp.value)->value);
         }
     }
     
@@ -684,6 +694,7 @@ void db_storage::collection::load(
     if (get_instance()->_mode != mode::file_system)
         return;
     
+    flyweight_tkey fw_key = flyweight_string_pool::get_instance()->make_flyweight(key);
     tdata *data = nullptr;
     
     try
@@ -699,7 +710,7 @@ void db_storage::collection::load(
     
     try
     {
-        _data->insert(key, data);
+        _data->insert(fw_key, data);
     }
     catch (std::bad_alloc const &)
     {
@@ -805,8 +816,8 @@ void db_storage::collection::copy_from(
     default:
         try
         {
-            _data = new b_tree<tkey, tdata *>(
-                *dynamic_cast<b_tree<tkey, tdata *> *>(other._data));
+            _data = new b_tree<flyweight_tkey, tdata *>(
+                *dynamic_cast<b_tree<flyweight_tkey, tdata *> *>(other._data));
         }
         catch (std::bad_alloc const &)
         {
@@ -836,8 +847,8 @@ void db_storage::collection::move_from(
     default:
         try
         {
-            _data = new b_tree<tkey, tdata *>(
-                std::move(*dynamic_cast<b_tree<tkey, tdata *> *>(other._data)));
+            _data = new b_tree<flyweight_tkey, tdata *>(
+                std::move(*dynamic_cast<b_tree<flyweight_tkey, tdata *> *>(other._data)));
         }
         catch (std::bad_alloc const &)
         {
@@ -1992,9 +2003,10 @@ void db_storage::load_collection(
         tkey login;
         tvalue value;
         size_t login_len, name_len;
+        std::string name;
         
         data_stream.read(reinterpret_cast<char *>(&login_len), sizeof(size_t));
-        value.name.reserve(login_len);
+        login.reserve(login_len);
         for (size_t i = 0; i < login_len; ++i)
         {
             data_stream.read(&ch, sizeof(char));
@@ -2004,12 +2016,14 @@ void db_storage::load_collection(
         data_stream.read(reinterpret_cast<char *>(&value.karma), sizeof(size_t));
         data_stream.read(reinterpret_cast<char *>(&name_len), sizeof(size_t));
         
-        value.name.reserve(name_len);
+        name.reserve(name_len);
         for (size_t i = 0; i < name_len; ++i)
         {
             data_stream.read(&ch, sizeof(char));
-            value.name.push_back(ch);
+            name.push_back(ch);
         }
+        
+        value.name = flyweight_string_pool::get_instance()->make_flyweight(name);
         
         get_instance()->obtain(pool_name)
                         .obtain(schema_name)

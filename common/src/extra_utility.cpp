@@ -23,6 +23,12 @@ template<> std::string extra_utility::make_string(long double const &value)     
 template<> std::string extra_utility::make_string(std::string const &value)         { return value; }
 template<> std::string extra_utility::make_string(char * const &value)              { return std::string(value); }
 
+template<> std::string extra_utility::make_string(
+	std::shared_ptr<flyweight_string> const &value)
+{
+	return value.get()->get_data();
+}
+
 std::string extra_utility::make_path(
 	std::initializer_list<std::string> list)
 {

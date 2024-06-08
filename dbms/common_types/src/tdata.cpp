@@ -15,66 +15,29 @@ int tkey_comparer::operator()(
 	return 0;
 }
 
+int tkey_comparer::operator()(
+	flyweight_tkey const &lhs,
+	flyweight_tkey const &rhs) const
+{
+	if (lhs.get()->get_data() != rhs.get()->get_data())
+	{
+		return lhs < rhs ? -1 : 1;
+	}
+	return 0;
+}
+
 tvalue::tvalue():
 		karma(0),
-		name("")
+		name(flyweight_string_pool::get_instance()->make_flyweight(""))
 { }
 
 tvalue::tvalue(
 	uint64_t karma,
 	std::string const &name):
 		karma(karma),
-		name(name)
+		name(flyweight_string_pool::get_instance()->make_flyweight(name))
 { }
 
-
-// tvalue::~tvalue()
-// {
-// 	delete[] name;
-// }
-
-// tvalue::tvalue(
-// 	tvalue const &other):
-// 		karma(other.karma),
-// 		name(new char[strlen(other.name) + 1])
-// {
-// 	strcpy(name, other.name);
-// }
-
-// tvalue tvalue::operator=(
-// 	tvalue const &other)
-// {
-// 	if (this != &other)
-// 	{
-// 		delete[] name;
-// 		name = (new char[strlen(other.name) + 1]);
-// 		strcpy(name, other.name);
-// 	}
-	
-// 	return *this;
-// }
-
-// tvalue::tvalue(
-// 	tvalue &&other) noexcept:
-// 		karma(other.karma),
-// 		name(other.name)
-// {
-// 	other.name = nullptr;
-// }
-
-// tvalue tvalue::operator=(
-// 	tvalue &&other) noexcept
-// {
-// 	if (this != &other)
-// 	{
-// 		karma = other.karma;
-// 		name = other.name;
-		
-// 		other.name = nullptr;
-// 	}
-	
-// 	return *this;
-// }
 
 ram_tdata::ram_tdata(
 	tvalue const &value):
@@ -117,13 +80,13 @@ void file_tdata::serialize(
 	}
 	
 	size_t login_len = key.size();
-	size_t name_len = value.name.size();
+	size_t name_len = value.name.get()->get_data().size();
 	
     data_stream.write(reinterpret_cast<char const *>(&login_len), sizeof(size_t));
     data_stream.write(key.c_str(), sizeof(char) * login_len);
     data_stream.write(reinterpret_cast<char const *>(&value.karma), sizeof(int64_t));
     data_stream.write(reinterpret_cast<char const *>(&name_len), sizeof(size_t));
-    data_stream.write(value.name.c_str(), sizeof(char) * name_len);
+    data_stream.write(value.name.get()->get_data().c_str(), sizeof(char) * name_len);
 	data_stream.flush();
 	
 	if (data_stream.fail())
@@ -149,14 +112,15 @@ tvalue file_tdata::deserialize(
 	
 	tvalue value;
 	size_t login_len, name_len;
+	std::string name;
 	
 	data_stream.read(reinterpret_cast<char *>(&login_len), sizeof(size_t));
 	data_stream.seekg(login_len, std::ios::cur);
     data_stream.read(reinterpret_cast<char *>(&value.karma), sizeof(size_t));
 	data_stream.read(reinterpret_cast<char *>(&name_len), sizeof(size_t));
 	
-	value.name.resize(name_len);
-	for (auto &ch : value.name)
+	name.resize(name_len);
+	for (auto &ch : name)
 	{
 		data_stream.read(&ch, sizeof(char));
 	}
@@ -165,6 +129,8 @@ tvalue file_tdata::deserialize(
 	{
 		throw std::ios::failure("An error occured while deserializing data");
 	}
+	
+	value.name = flyweight_string_pool::get_instance()->make_flyweight(name);
 	
     return value;
 }

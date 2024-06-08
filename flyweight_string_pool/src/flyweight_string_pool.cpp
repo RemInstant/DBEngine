@@ -1,4 +1,6 @@
-#include "../include/string_pool.h"
+#include "../include/flyweight_string_pool.h"
+
+#include <iostream>
 
 flyweight_string::flyweight_string(
     std::string const &str):
@@ -11,13 +13,13 @@ std::string flyweight_string::get_data() const
 }
 
 
-flyweight_string_pool *flyweight_string_pool::get_instance()
+flyweight_string_pool *flyweight_string_pool::flyweight_string_pool::get_instance()
 {
     static auto *pool = new flyweight_string_pool();
     return pool; 
 }
 
-std::shared_ptr<flyweight_string> flyweight_string_pool::convert_to_flyweight(
+std::shared_ptr<flyweight_string> flyweight_string_pool::make_flyweight(
     std::string const & str)
 {
     auto it = _flyweight_pool.find(str);
@@ -33,11 +35,15 @@ std::shared_ptr<flyweight_string> flyweight_string_pool::convert_to_flyweight(
 
 void flyweight_string_pool::consolidate()
 {
-    for (auto iter = _flyweight_pool.begin(); iter != _flyweight_pool.end(); ++iter)
+    for (auto iter = _flyweight_pool.begin(); iter != _flyweight_pool.end();)
     {
         if (iter->second.use_count() == 1)
         {
             iter = _flyweight_pool.erase(iter);
+        }
+        else
+        {
+            ++iter;
         }
     }
 }

@@ -1,3 +1,6 @@
+#ifndef OPERATING_SYSTEMS_COURSE_WORK_FLYWEIGHT_STRING_POOL
+#define OPERATING_SYSTEMS_COURSE_WORK_FLYWEIGHT_STRING_POOL
+
 #include <string>
 #include <memory>
 #include <map>
@@ -17,11 +20,12 @@ public:
 public:
 
     std::string get_data() const;
+
 };
 
 class flyweight_string_pool
 {
-    
+
 private:
 
     std::map<std::string, std::shared_ptr<flyweight_string>> _flyweight_pool;
@@ -32,7 +36,7 @@ public:
 
 public:
 
-    std::shared_ptr<flyweight_string> convert_to_flyweight(const std::string &str);
+    std::shared_ptr<flyweight_string> make_flyweight(const std::string &str);
 
     void consolidate();
 
@@ -49,3 +53,5 @@ public:
         flyweight_string_pool &&) = delete;
 
 };
+
+#endif // OPERATING_SYSTEMS_COURSE_WORK_FLYWEIGHT_STRING_POOL

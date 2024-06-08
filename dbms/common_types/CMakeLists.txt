@@ -16,6 +16,10 @@ target_link_libraries(
         os_cw_dbms_cmmn_types
         PUBLIC
         os_cw_allctr_allctr)
+target_link_libraries(
+        os_cw_dbms_cmmn_types
+        PUBLIC
+        os_cw_flwght_str_pool)
 set_target_properties(
         os_cw_dbms_cmmn_types PROPERTIES
         LANGUAGES CXX

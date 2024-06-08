@@ -30,6 +30,12 @@ target_link_libraries(
         PUBLIC
         os_cw_lggr_srvr_lggr)
 
+
+target_link_libraries(
+        os_cw_dbms_mngr_srvr
+        PUBLIC
+        os_cw_flwght_str_pool)
+
 set_target_properties(
         os_cw_dbms_mngr_srvr PROPERTIES
         LANGUAGES CXX

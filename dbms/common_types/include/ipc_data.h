@@ -119,6 +119,7 @@ namespace db_ipc
 		
 		long mtype;
 		pid_t pid;
+		pid_t srvr_pid;
 		size_t req_id;
 		command cmd;
 		command_status status;

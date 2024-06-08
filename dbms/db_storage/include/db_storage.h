@@ -9,6 +9,7 @@
 #include <allocator.h>
 #include <allocator_with_fit_mode.h>
 #include <tdata.h>
+#include <flyweight_string_pool.h>
 
 class db_storage final
 {
@@ -185,7 +186,7 @@ private:
 	
 	private:
 	
-		search_tree<tkey, tdata *> *_data;
+		search_tree<flyweight_tkey, tdata *> *_data;
 		search_tree_variant _tree_variant;
 		
 		std::shared_ptr<allocator> _allocator;

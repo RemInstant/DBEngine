@@ -2,10 +2,12 @@
 #define OPERATING_SYSTEMS_COURSE_WORK_COMMON_EXTRA_UTILITY_H
 
 #include <string>
+#include <flyweight_string_pool.h>
+#include <memory>
 
 namespace extra_utility
 {
-    
+
     template<
         typename T>
     std::string make_string(T const &value);
@@ -21,6 +23,7 @@ namespace extra_utility
     template<> std::string make_string(long double const &value);
     template<> std::string make_string(std::string const &value);
     template<> std::string make_string(char * const &value);
+    template<> std::string make_string(std::shared_ptr<flyweight_string> const &value);
     
     std::string make_path(
 	    std::initializer_list<std::string> list);

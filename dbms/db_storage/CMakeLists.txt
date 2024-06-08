@@ -58,6 +58,10 @@ target_link_libraries(
         os_cw_dbms_db_strg
         PUBLIC
         os_cw_allctr_allctr)
+target_link_libraries(
+        os_cw_dbms_db_strg
+        PUBLIC
+        os_cw_flwght_str_pool)
         
 target_link_libraries(
         os_cw_dbms_db_strg

@@ -11,6 +11,12 @@ target_include_directories(
         os_cw_cmmn
         PUBLIC
         ./include)
+
+target_link_libraries(
+        os_cw_cmmn
+        PUBLIC
+        os_cw_flwght_str_pool)
+
 set_target_properties(
         os_cw_cmmn PROPERTIES
         LANGUAGES CXX
