@@ -23,7 +23,8 @@ std::shared_ptr<flyweight_string> flyweight_string_pool::make_flyweight(
     std::string const & str)
 {
     auto it = _flyweight_pool.find(str);
-    if (it != _flyweight_pool.end()) {
+    if (it != _flyweight_pool.end())
+    {
         return it->second;
     }
 

@@ -868,6 +868,7 @@ void db_storage::collection::collect_garbage(
     if (_disposed_cnt > 0.35 * _records_cnt)
     {
         consolidate(path);
+        flyweight_string_pool::get_instance()->consolidate();
         _disposed_cnt = 0;
     }
 }

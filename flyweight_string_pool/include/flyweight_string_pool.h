@@ -36,7 +36,8 @@ public:
 
 public:
 
-    std::shared_ptr<flyweight_string> make_flyweight(const std::string &str);
+    std::shared_ptr<flyweight_string> make_flyweight(
+        const std::string &str);
 
     void consolidate();
 
