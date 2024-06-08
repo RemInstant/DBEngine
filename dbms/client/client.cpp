@@ -7,6 +7,9 @@
 #include <wait.h>
 
 #include <ipc_data.h>
+#include <logger.h>
+#include <server_logger.h>
+
 
 // sudo sysctl -w kernel.yama.ptrace_scope=0
 
@@ -26,12 +29,19 @@ int msgrcvt(
 
 void run_session(
 	int mq_descriptor,
+	logger *log,
     std::istream &stream,
 	bool is_terminal,
 	size_t &request_counter);
 
-int main()
+int main(int argc, char** argv)
 {
+	if (argc != 1 && argc != 3)
+	{
+		std::cout << "Usage: ./exe [<logger path> <json path>]" << std::endl;
+		return 1;
+	}
+	
 	pid_t pid = getpid();
 	
 	while (getpid() <= db_ipc::MANAGER_SERVER_MAX_COMMAND_PRIOR)
@@ -40,7 +50,7 @@ int main()
 		{
 			case -1:
 				std::cout << "An error occurred while starting client process" << std::endl;
-				return 1;
+				return 2;
 			case 0:
 				break;
 			default:
@@ -50,12 +60,13 @@ int main()
 	}
 	
 	int mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
+	logger* log = nullptr;
 	size_t request_counter = 1;
 	
 	if (mq_descriptor == -1)
 	{
 		std::cout << "Cannot connect to the server" << std::endl;
-		return 2;
+		return 3;
 	}
 	
 	int rcv = -1;
@@ -67,12 +78,32 @@ int main()
 	
 	try
 	{
-		run_session(mq_descriptor, std::cin, true, request_counter);
+		server_logger_builder builder;
+		if (argc == 1)
+		{
+			log = builder.build();
+		}
+		else
+		{
+			log = builder
+				.transform_with_configuration(argv[1], argv[2])
+				->build();
+		}
+	}
+	catch(...)
+	{
+		std::cout << "Failed to create logger" << std::endl;
+		return 4;
+	}
+	
+	try
+	{
+		run_session(mq_descriptor, log, std::cin, true, request_counter);
 	}
 	catch (std::runtime_error const &ex)
 	{
 		std::cout << ex.what() << std::endl;
-		return 3;
+		return 5;
 	}
 }
 
@@ -148,7 +179,7 @@ bool read_long_string(
 
     if (str[0] == '\'')
     {
-        name.erase(0, 1);
+        str.erase(0, 1);
 
         if (args.peek() == '\'')
         {
@@ -175,7 +206,7 @@ bool read_long_string(
                 cur = ' ';
             }
 
-            name += cur;
+            str += cur;
         }
 		
         return false;
@@ -557,6 +588,7 @@ void handle_dispose_collection_command(
 
 void handle_execute_file_command(
 	int mq_descriptor,
+	logger *log,
 	std::istringstream &args,
 	size_t &request_counter)
 {
@@ -572,7 +604,7 @@ void handle_execute_file_command(
 		throw std::runtime_error("Cannot open the command file");
 	}
 	
-	run_session(mq_descriptor, fstream, false, request_counter);
+	run_session(mq_descriptor, log, fstream, false, request_counter);
 }
 
 void handle_reconnect_command(
@@ -797,6 +829,7 @@ int msgrcvt(
 
 void run_session(
 	int mq_descriptor,
+	logger *log,
     std::istream &stream,
 	bool is_terminal,
 	size_t &request_counter)
@@ -873,7 +906,7 @@ void run_session(
 			}
 			else if (cmd == "executeFile")
 			{
-				handle_execute_file_command(mq_descriptor, line, request_counter);
+				handle_execute_file_command(mq_descriptor, log, line, request_counter);
 				request_counter = request_counter % static_cast<size_t>(1e9) + 1;
 				continue;
 			}

@@ -8,6 +8,14 @@ target_link_libraries(
         os_cw_dbms_clnt
         PUBLIC
         os_cw_dbms_cmmn_types)
+target_link_libraries(
+        os_cw_dbms_clnt
+        PUBLIC
+        os_cw_lggr_lggr)
+target_link_libraries(
+        os_cw_dbms_clnt
+        PUBLIC
+        os_cw_lggr_srvr_lggr)
 set_target_properties(
         os_cw_dbms_clnt PROPERTIES
         LANGUAGES CXX

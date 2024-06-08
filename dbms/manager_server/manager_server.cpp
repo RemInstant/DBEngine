@@ -70,7 +70,9 @@ void run_terminal_reader(
 
 pid_t run_storage_server(
     logger* logger,
-    size_t strg_server_id);
+    size_t strg_server_id,
+    char *logger_path,
+    char *json_path);
 
 
 size_t get_id_for_key(
@@ -86,6 +88,8 @@ int redistribute_keys(
 
 void handle_add_server_command(
     logger* logger,
+    char *logger_path,
+    char *json_path,
     bool is_filesystem,
     std::vector<pid_t> &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
@@ -122,13 +126,13 @@ void handle_obtain_between_command(
 
 int main(int argc, char** argv)
 {
-    // if (argc != 2)
-    // {
-    //     std::cout << "Usage: ./exe <-f/-m>" << std::endl;
-    //     return 0;
-    // }
+    if (argc != 4)
+    {
+        std::cout << "Usage: ./exe <-f/-m> <config path> <json path>" << std::endl;
+        return 0;
+    }
     
-    argv[1] = "1";
+    // argv[1] = "1";
     bool is_filesystem;
     std::string mode = std::string(argv[1]);
 
@@ -142,8 +146,8 @@ int main(int argc, char** argv)
     }
     else
     {
-        // std::cout << "Invalid mode" << std::endl;
-        // return 1;
+        std::cout << "Invalid mode" << std::endl;
+        return 1;
         is_filesystem = true;
     }
     
@@ -152,12 +156,7 @@ int main(int argc, char** argv)
     try
     {
         log = server_logger_builder()
-			.add_file_stream("logs", logger::severity::information)
-			->add_file_stream("logs", logger::severity::error)
-			->add_file_stream("logs", logger::severity::warning)
-			->add_console_stream(logger::severity::information)
-			->add_console_stream(logger::severity::warning)
-			->add_console_stream(logger::severity::error)
+            .transform_with_configuration(argv[2], argv[3])
 			->build();
     }
     catch (std::bad_alloc const &)
@@ -263,7 +262,7 @@ int main(int argc, char** argv)
             {
                 try
                 {
-                    handle_add_server_command(log, is_filesystem, strg_servers, separators, msg);
+                    handle_add_server_command(log, argv[2], argv[3], is_filesystem, strg_servers, separators, msg);
                     save_config(strg_servers.size());
                 }
                 catch (std::ios::failure const &ex)
@@ -686,7 +685,9 @@ int transfer_right_n(
 #pragma endregion ipc utility
 
 void handle_add_server_command(
-    logger* logger,
+    logger* log,
+    char *logger_path,
+    char *json_path,
     bool is_filesystem,
     std::vector<pid_t> &strg_servers,
     std::map<db_path, std::vector<std::string>> &separators,
@@ -694,7 +695,7 @@ void handle_add_server_command(
 {
     size_t id = strg_servers.size() + 1;
     
-    pid_t pid = run_storage_server(logger, id);
+    pid_t pid = run_storage_server(log, id, logger_path, json_path);
     
     if (pid == -1)
     {
@@ -780,14 +781,17 @@ void handle_terminate_server_command(
 }
 
 pid_t run_storage_server(
-    logger* logger,
-    size_t strg_server_id)
+    logger* log,
+    size_t strg_server_id,
+    char *logger_path,
+    char *json_path)
 {
     pid_t pid = fork();
     
     if (pid == 0)
     {
-        int code = execl("../db_storage/server/os_cw_dbms_db_strg_srvr", std::to_string(strg_server_id).c_str(), NULL);
+        int code = execl("../db_storage/server/os_cw_dbms_db_strg_srvr",
+                std::to_string(strg_server_id).c_str(), logger_path, json_path, NULL);
         
         if (code == -1)
         {
@@ -808,8 +812,8 @@ pid_t run_storage_server(
         return pid;
     }
     
-    log->error("[Mngr " + std::to_string(getpid()) + "] Runned server (" std::to_string(pid) + ") does not responding");
-    std::cout << "Runned server (" std::to_string(pid) + ") does not responding" << std::endl;
+    log->error("[Mngr " + std::to_string(getpid()) + "] Runned server (" + std::to_string(pid) + ") does not responding");
+    std::cout << "Runned server (" << std::to_string(pid) << ") does not responding" << std::endl;
     
     return -1;
 }

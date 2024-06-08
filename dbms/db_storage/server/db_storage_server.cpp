@@ -20,7 +20,12 @@ int mq_descriptor = -1;
 #include "sys/stat.h"
 
 int main(int argc, char** argv)
-{	
+{
+	if (argc != 3)
+	{
+		return 1;
+	}
+		
 	pid_t pid = getpid();
 	
 	while (getpid() <= db_ipc::MANAGER_SERVER_MAX_COMMAND_PRIOR)
@@ -28,7 +33,7 @@ int main(int argc, char** argv)
 		switch (pid = fork())
 		{
 			case -1:
-				return 1;
+				return 2;
 			case 0:
 				break;
 			default:
@@ -55,24 +60,19 @@ int main(int argc, char** argv)
 	try
 	{
 		logger = server_logger_builder()
-			.add_file_stream("logs", logger::severity::information)
-			->add_file_stream("logs", logger::severity::error)
-			->add_file_stream("logs", logger::severity::warning)
-			->add_console_stream(logger::severity::information)
-			->add_console_stream(logger::severity::warning)
-			->add_console_stream(logger::severity::error)
+			.transform_with_configuration(argv[1], argv[2])
 			->build();
 	}
 	catch (...)
 	{
-		return 2;
+		return 3;
 	}
 	
     mq_descriptor = msgget(db_ipc::MANAGER_SERVER_MQ_KEY, 0666);
     if (mq_descriptor == -1)
     {
 		logger->error(log_base + "[-----] Failed to open message queue");
-        return 3;
+        return 4;
     }
 	
 	logger->information(log_base + "[-----] Server started");

@@ -64,14 +64,16 @@ int main()
         
         if (msg.file_path[0] && !streams.count(msg.file_path))
         {	
-            std::ofstream fstream = std::ofstream(msg.file_path, std::ios::app);
+            std::ofstream fstream(msg.file_path, std::ios::app);
             
             if (!fstream.is_open())
             {
                 std::cerr << file_cannot_be_opened(msg.file_path).what() << std::endl;
             }
-            
-            streams[msg.file_path] = std::move(fstream);
+            else
+            {
+                streams[msg.file_path] = std::move(fstream);
+            }
         }
         
         if (msg.packet_cnt == 1)
