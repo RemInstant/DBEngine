@@ -60,5 +60,5 @@ DBEngine &mdash; клиент-серверное на межпроцессном
 * obtain \<poolName\> \<schemaName\> \<collectionName\> \<stringKey\> &mdash; чтение записи из коллекции;
 * obtain \<poolName\> \<schemaName\> \<collectionName\> \<stringKeyLeft\> \<stringKeyRight\> &mdash; чтение диапазона записей из коллекции;
 * reconnect &mdash; переподключение к серверу;
-* executeFile \<fileName\>
+* executeFile \<fileName\> &mdash; выполнение файла с команд, синтаксис команд аналогичен командом интерактивного диалога, при ошибке обработка файла завершается.
  
